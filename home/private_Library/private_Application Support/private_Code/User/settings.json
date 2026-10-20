@@ -640,5 +640,20 @@
 	"chat.agentsControl.enabled": false,
 	"workbench.secondarySideBar.defaultVisibility": "hidden",
 	"claudeCode.preferredLocation": "panel",
-	"rumdl.server.path": "/opt/homebrew/bin/rumdl"
+  "rumdl.server.path": "/opt/homebrew/bin/rumdl",
+  "python.languageServer": "None",
+  "basedpyright.disableLanguageServices": true,
+  "yaml.disableSchemaDetection": [
+    "**/dbt_project.yml",
+    "**/dbt_project.yaml",
+    "**/.github/workflows/*.yml",
+    "**/.github/workflows/*.yaml",
+    "**/.gitea/workflows/*.yml",
+    "**/.gitea/workflows/*.yaml",
+    "**/.forgejo/workflows/*.yml",
+    "**/.forgejo/workflows/*.yaml"
+  ],
+  "extensions.supportAgentsWindow": {
+    "monokai.theme-monokai-pro-vscode": true
+  }
 }

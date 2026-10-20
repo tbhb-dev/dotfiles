@@ -156,6 +156,7 @@ fastmcp
 fatcontext
 Fediverse
 fergusstrange
+filepkg
 filterwarnings
 fontawesome
 fontsource
@@ -292,6 +293,7 @@ mutmut
 mvdan
 MYAPP
 mymodule
+myorg
 mypy
 myrepo
 mytool

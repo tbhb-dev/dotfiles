@@ -1127,6 +1127,10 @@
     (home-subpath "/Library/Caches/stanza")
 )
 
+(allow file-read* file-write*
+    (home-subpath "/.gemini")
+)
+
 ;; Chromium/Electron Mach port rendezvous for parent-child IPC on macOS.
 ;; The global name pattern is "<app-bundle-id>.MachPortRendezvousServer.<pid>".
 ;; Electron's main process registers it; child processes (GPU, renderer,
@@ -1148,3 +1152,118 @@
 (allow file-read*
     (home-subpath "/.local/bin")
 )
+
+;; --- Docker Desktop: socket connect -------------------------------------------
+;; AF_UNIX connect() is NOT a file-* operation. docker.sb's file-read*/file-write*
+;; grants on the socket let you stat it, but connect() is gated by network-outbound
+;; with a path filter, and the blanket (allow network*) in 20-network.sb does not
+;; cover it. Without this, connect() returns EPERM while stat() succeeds.
+(allow network-outbound
+    (literal "/var/run/docker.sock")
+    (literal "/private/var/run/docker.sock")
+    (home-literal "/.docker/run/docker.sock")
+)
+
+;; --- Docker Desktop: CLI binaries and credential helper ------------------------
+;; /usr/local/bin/docker* are symlinks into the bundle. Every intermediate
+;; component must be stat-able: Go's exec.LookPath stats the resolved target and
+;; reports "not found in $PATH" if any component is denied -- even though
+;; (allow process-exec) lets the binary run fine when invoked directly.
+(allow file-read*
+    (subpath "/Applications/Docker.app")
+)
+
+;; --- Docker Desktop: credential helper state -----------------------------------
+;; credsStore="desktop" means docker-credential-desktop runs on every registry
+;; operation, including anonymous pulls of public images. It initializes a log/state
+;; tree under its container dir before anything else, and that init is fatal on
+;; failure -- read-only is not enough. Confusing symptom when denied: the helper
+;; cannot stat the dir, falls back to mkdir, and reports "file exists".
+(allow file-read* file-write*
+    (home-subpath "/Library/Containers/com.docker.docker")
+    (home-subpath "/Library/Group Containers/group.com.docker")
+)
+
+;; ---------------------------------------------------------------------------
+;; Toolchain: Apple Command Line Tools
+;; clang/clang++, headers, and the macOS SDK behind xcode-select's developer dir.
+;; ---------------------------------------------------------------------------
+
+;; Any cgo, node-gyp, native-gem, or C-extension build shells out to clang
+;; through xcode-select. /usr/bin/clang++ is only a shim that re-execs the
+;; real binary under /Library/Developer, so without read access here xcrun
+;; reports "Failed to locate 'clang++'" even though /usr/bin/clang++ is
+;; readable and the Command Line Tools are installed.
+(allow file-read*
+    (subpath "/Library/Developer")   ;; clang, headers, and the MacOSX SDK.
+)
+
+;; ---------------------------------------------------------------------------
+;; Toolchain: APM (Agent Package Manager)
+;; `apm install` creates and manages a user-level home dir. Denied writes
+;; surface confusingly as "[Errno 17] File exists: ~/.apm" rather than EPERM.
+;; ---------------------------------------------------------------------------
+(allow file-read* file-write*
+    (home-subpath "/.apm")                ;; apm dependency cache and installed-package state.
+    (home-subpath "/.config/apm")         ;; apm config, when present.
+)
+
+;; ---------------------------------------------------------------------------
+;; Integration: Anthropic CLI (ant)
+;; Write access is required, not just read: `ant` refreshes the OAuth access
+;; token in place when it is expired or near expiry. Read-only yields a 401
+;; with "x-api-key header is required".
+;; ---------------------------------------------------------------------------
+(allow file-read* file-write*
+    (home-subpath "/.config/anthropic")   ;; ant profiles + credentials/default.json.
+)
+
+;; ---------------------------------------------------------------------------
+;; Dynamic grant: ~/Code (read/write)
+;; Supersedes the read-only /Users/tony/Code grant above (safe to leave
+;; that one in place; allow rules are additive).
+(allow file-read* file-write*
+    (home-subpath "/Code")
+)
+
+;; ---------------------------------------------------------------------------
+;; sigstore-rs TUF cache (mise artifact attestation verification)
+;;
+;; mise verifies GitHub artifact attestations through sigstore-rs, which keeps
+;; its TUF trust-root cache in a location derived from the `directories` crate:
+;;   ProjectDirs::from("dev", "sigstore", "sigstore-rust").cache_dir().join("tuf")
+;; On macOS that resolves to ~/Library/Caches/dev.sigstore.sigstore-rust/tuf.
+;; It is a sibling of ~/Library/Caches/mise, not a child, so the mise grant
+;; above does not cover it.
+;;
+;; Confusing symptom when denied (same class as the ~/.apm and
+;; docker-credential-desktop notes elsewhere in this profile): the create is
+;; refused, and the error surfaces as EEXIST rather than EPERM --
+;;   "TUF error: Failed to create cache directory: File exists (os error 17)"
+;; Every attestation-verified `mise install` fails; already-installed tools
+;; keep working, so the breakage only appears when a pin moves.
+;; ---------------------------------------------------------------------------
+(allow file-read* file-write*
+    (home-subpath "/Library/Caches/dev.sigstore.sigstore-rust")
+)
+
+;; ---------------------------------------------------------------------------
+;; Quarto render cache
+;;
+;; quarto (/usr/local/bin/quarto, outside Homebrew) keeps its per-user cache in
+;; ~/Library/Caches/quarto and creates it on first render. Denied, the failure
+;; is an ordinary EPERM on the mkdir -- so unlike the sigstore case above it
+;; names itself clearly -- but every render fails until the directory exists.
+;; ---------------------------------------------------------------------------
+(allow file-read* file-write*
+    (home-subpath "/Library/Caches/quarto")
+)
+
+
+;; Coordinator: run ps (setuid root) and read process information.
+(allow process-exec (literal "/bin/ps"))
+(allow process-info*)
+;; Coordinator: reach the default tmux server socket.
+(allow file-read* file-write* (subpath "/private/tmp/tmux-501"))
+(allow network-outbound (regex #"^/private/tmp/tmux-501/"))
+

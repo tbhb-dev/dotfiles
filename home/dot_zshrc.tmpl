@@ -80,6 +80,8 @@ SAFEHOUSE_APPEND_PROFILE="$HOME/.config/agent-safehouse/local-overrides.sb"
 safe() { safehouse --add-dirs-ro=~/Code --enable=browser-native-messaging --append-profile="$SAFEHOUSE_APPEND_PROFILE" "$@"; }
 safe-claude() { safe claude --dangerously-skip-permissions "$@"; }
 safe-claude-workspace() { safe --add-dirs=$PWD/.. -- claude --dangerously-skip-permissions "$@"; }
+safe-codex() { safe codex --dangerously-bypass-approvals-and-sandbox "$@"; }
+safe-codex-workspace() { safe --add-dirs=$PWD/.. -- codex --dangerously-bypass-approvals-and-sandbox "$@"; }
 
 # Clone a GitHub repo into ~/Code/github.com/<org>/<repo>, or update it if already cloned
 ghrc() {

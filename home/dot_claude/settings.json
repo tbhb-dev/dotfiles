@@ -3,97 +3,96 @@
   "cleanupPeriodDays": 7,
   "env": {
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "CLAUDE_CODE_NO_FLICKER": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
   },
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
-      "Read(~/.gitconfig)",
-      "Read(~/.gitignore)",
-      "Read(~/.zshrc)",
-      "Read(~/.ssh/config)",
-      "Read(~/.npmrc)",
-      "Read(~/.node-version)",
-      "Read(~/.nvmrc)",
-      "Read(~/.tool-versions)",
-      "Read(~/.config/git/*)",
       "Bash(cat:*)",
-      "Bash(ls:*)",
-      "Bash(pwd:*)",
       "Bash(echo:*)",
-      "Bash(which:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)",
-      "Bash(wc:*)",
-      "Bash(rg:*)",
       "Bash(fd:*)",
       "Bash(find:*)",
-      "Bash(grep:*)",
-      "Bash(tree:*)",
-      "Bash(git status:*)",
-      "Bash(git log:*)",
-      "Bash(git diff:*)",
-      "Bash(git branch:*)",
-      "Bash(git show:*)",
-      "Bash(git remote:*)",
-      "Bash(gh query:*)",
       "Bash(gh auth status:*)",
-      "Bash(gh status:*)",
-      "Bash(gh repo view:*)",
-      "Bash(gh repo list:*)",
-      "Bash(gh pr list:*)",
-      "Bash(gh pr view:*)",
-      "Bash(gh pr checks:*)",
-      "Bash(gh pr diff:*)",
+      "Bash(gh cache list:*)",
       "Bash(gh issue list:*)",
       "Bash(gh issue view:*)",
+      "Bash(gh label list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh query:*)",
       "Bash(gh release list:*)",
       "Bash(gh release view:*)",
+      "Bash(gh repo list:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh run download:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Bash(gh run watch:*)",
-      "Bash(gh run download:*)",
-      "Bash(gh workflow list:*)",
-      "Bash(gh workflow view:*)",
-      "Bash(gh workflow run:*)",
-      "Bash(gh cache list:*)",
-      "Bash(gh label list:*)",
+      "Bash(gh status:*)",
       "Bash(gh variable list:*)",
-      "Bash(node --version:*)",
+      "Bash(gh workflow list:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh workflow view:*)",
+      "Bash(git branch:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git remote:*)",
+      "Bash(git show:*)",
+      "Bash(git status:*)",
+      "Bash(grep:*)",
+      "Bash(head:*)",
+      "Bash(ls:*)",
       "Bash(npm --version:*)",
-      "Bash(python --version:*)",
-      "Bash(ruby --version:*)",
+      "Bash(pwd:*)",
+      "Bash(rg:*)",
+      "Bash(tail:*)",
+      "Bash(tree:*)",
       "Bash(uv --version:*)",
-      "Bash(uv version:*)",
-      "Bash(uv python list:*)",
-      "Bash(uv python find:*)",
-      "Bash(uv tool list:*)",
+      "Bash(uv add:*)",
+      "Bash(uv cache dir:*)",
+      "Bash(uv init:*)",
+      "Bash(uv lock --check:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv pip check:*)",
+      "Bash(uv pip compile:*)",
+      "Bash(uv pip install:*)",
       "Bash(uv pip list:*)",
       "Bash(uv pip show:*)",
-      "Bash(uv pip check:*)",
-      "Bash(uv pip tree:*)",
-      "Bash(uv lock --check:*)",
-      "Bash(uv tree:*)",
-      "Bash(uv cache dir:*)",
-      "Bash(uv sync:*)",
-      "Bash(uv add:*)",
-      "Bash(uv remove:*)",
-      "Bash(uv lock:*)",
-      "Bash(uv pip install:*)",
-      "Bash(uv pip uninstall:*)",
-      "Bash(uv pip compile:*)",
       "Bash(uv pip sync:*)",
-      "Bash(uv venv:*)",
-      "Bash(uv init:*)",
+      "Bash(uv pip tree:*)",
+      "Bash(uv pip uninstall:*)",
+      "Bash(uv python find:*)",
       "Bash(uv python install:*)",
+      "Bash(uv python list:*)",
       "Bash(uv python pin:*)",
+      "Bash(uv remove:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv tool list:*)",
+      "Bash(uv tree:*)",
+      "Bash(uv venv:*)",
+      "Bash(uv version:*)",
+      "Bash(wc:*)",
+      "Bash(which:*)",
+      "Read(~/.config/git/*)",
+      "Read(~/.gitconfig)",
+      "Read(~/.gitignore)",
+      "Read(~/.node-version)",
+      "Read(~/.nvmrc)",
+      "Read(~/.tool-versions)",
+      "Read(~/.zshrc)",
       "WebFetch(domain:*.anthropic.com)",
-      "WebFetch(domain:anthropic.com)",
       "WebFetch(domain:*.claude.com)",
+      "WebFetch(domain:anthropic.com)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:vale.sh)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:vale.sh)"
     ],
     "deny": [
       "Bash(rm -rf /:*)",
@@ -157,6 +156,31 @@
       "Read(~/.zsh_history)"
     ]
   },
+  "model": "opus",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/tony/.claude/hooks/guard-exit-echo.pl",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/Users/tony/.claude/hooks/rewrite-bsd-sed-i.pl",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/Users/tony/.claude/hooks/rewrite-zsh-equals.pl",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "PATH=/opt/homebrew/bin:$PATH COLUMNS=${COLUMNS:-$(tmux display-message -p '#{pane_width}' 2>/dev/null || echo 80)} bunx -y ccstatusline@latest",
@@ -170,6 +194,7 @@
     "skill-creator@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": true
   },
+  "feedbackDrafts": "off",
   "spinnerVerbs": {
     "mode": "replace",
     "verbs": [
@@ -177,10 +202,21 @@
     ]
   },
   "effortLevel": "high",
+  "modelSettings": {
+    "claude-fable-5-1": {
+      "effortLevel": "medium"
+    },
+    "claude-opus-5-5": {
+      "effortLevel": "medium"
+    }
+  },
   "promptSuggestionEnabled": false,
+  "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "switchModelsOnFlag": false,
+  "agentPushNotifEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1754108041250
-  },
-  "model": "opus[1m]"
+  }
 }

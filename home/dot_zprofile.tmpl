@@ -41,6 +41,8 @@ export RUBY_YJIT_ENABLE=1
 {{ if $isDarwin -}}
 export PATH="{{ $brewPrefix }}/opt/coreutils/libexec/gnubin:$PATH"
 export PATH="{{ $brewPrefix }}/opt/curl/bin:$PATH"
+export PATH="{{ $brewPrefix }}/opt/findutils/libexec/gnubin:$PATH"
+export PATH="{{ $brewPrefix }}/opt/gawk/libexec/gnubin:$PATH"
 export PATH="{{ $brewPrefix }}/opt/gnu-sed/libexec/gnubin:$PATH"
 export PATH="{{ $brewPrefix }}/opt/gnu-tar/libexec/gnubin:$PATH"
 export PATH="{{ $brewPrefix }}/opt/openssl@3/bin:$PATH"

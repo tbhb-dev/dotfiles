@@ -6,6 +6,6 @@ experimental = true
 bun = "latest"
 go = "latest"
 kubectl = "1.32"
-node = "24"
+node = "lts"
 ruby = "latest"
 starship = "latest"

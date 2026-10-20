@@ -76,3 +76,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 Use `gh query` instead of `gh api` for read-only GitHub API calls — it is automatically allowed without a confirmation prompt. `gh query` accepts the same arguments as `gh api` but blocks mutating methods (POST, PUT, PATCH, DELETE) and `--input`.
 
 Use `gh api` (which requires confirmation) only when you actually need to mutate state.
+
+## Shell userland
+
+This is macOS, but GNU comes first on PATH: coreutils, findutils, gawk, gnu-sed, gnu-tar. Write GNU syntax and don't downgrade to BSD spellings on account of the platform — `date -d`, `stat -c`, `head -n -1`, `sed -i` with no `''` argument are all correct here, and their BSD counterparts (`date -v`, `stat -f`) are not.
+
+Scripts that will run somewhere else — CI, a container, a stock macOS box — can't assume any of that. Write those portably.
