@@ -39,24 +39,24 @@ case "$TERM_PROGRAM" in
     ;;
 esac
 
+# Only load line-editor plugins / prompt in a real terminal (not VSCode's
+# env-resolution shell or other headless `zsh -i` invocations).
+if [[ -t 0 && -t 1 && -z "$VSCODE_RESOLVING_ENVIRONMENT" ]]; then
+  _zle_ok=1
+fi
+
 # zsh plugins
+if (( _zle_ok )); then
 {{ if ne $brewPrefix "" -}}
-if [ -f "{{ $brewPrefix }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
-  source "{{ $brewPrefix }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
-elif [ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
-  source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-fi
-
-if [ -f "{{ $brewPrefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
-  source "{{ $brewPrefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
-elif [ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]; then
-  source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-fi
+{{ "  " }}if [ -f "{{ $brewPrefix }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
+    source "{{ $brewPrefix }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+  elif [ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
+    source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+  fi
 {{ else -}}
-[ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ] && source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ] && source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+{{ "  " }}[ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ] && source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 {{ end -}}
-
+fi
 alias bx='bundle exec'
 alias g='git'
 alias ga='git add'
@@ -72,7 +72,7 @@ alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 {{ end -}}
 
 eval "$(mise activate zsh)"
-eval "$(starship init zsh)"
+(( _zle_ok )) && eval "$(starship init zsh)"
 
 # agent-safehouse
 SAFEHOUSE_APPEND_PROFILE="$HOME/.config/agent-safehouse/local-overrides.sb"
@@ -82,6 +82,23 @@ safe-claude() { safe claude --dangerously-skip-permissions "$@"; }
 safe-claude-workspace() { safe --add-dirs=$PWD/.. -- claude --dangerously-skip-permissions "$@"; }
 safe-codex() { safe codex --dangerously-bypass-approvals-and-sandbox "$@"; }
 safe-codex-workspace() { safe --add-dirs=$PWD/.. -- codex --dangerously-bypass-approvals-and-sandbox "$@"; }
+
+# Claude Code with the awrel channel. Development channels are opted into per
+# session on the command line; settings.json can't enable them. So when this
+# repo's .mcp.json defines an awrel server, add the flag. Subcommands (claude
+# mcp, claude update, ...) and -p/--print runs are passed through untouched:
+# non-interactive sessions ignore the flag anyway.
+claude() {
+  local root
+  root=$(command git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
+  if [[ -f $root/.mcp.json ]] && command grep -q '"awrel"' "$root/.mcp.json" \
+    && { (( $# == 0 )) || [[ $1 == -* ]]; } \
+    && (( ! ${@[(I)-p]} && ! ${@[(I)--print]} && ! ${@[(I)--dangerously-load-development-channels]} )); then
+    command claude --dangerously-load-development-channels server:awrel "$@"
+  else
+    command claude "$@"
+  fi
+}
 
 # Clone a GitHub repo into ~/Code/github.com/<org>/<repo>, or update it if already cloned
 ghrc() {
@@ -110,3 +127,18 @@ fi
 
 # Added by Antigravity CLI installer
 export PATH="{{ .chezmoi.homeDir }}/.local/bin:$PATH"
+
+# zsh-syntax-highlighting must be sourced LAST: it wraps every ZLE widget
+# defined before it, and widgets defined after it cause recursive re-wrapping.
+if (( _zle_ok )); then
+{{ if ne $brewPrefix "" -}}
+{{ "  " }}if [ -f "{{ $brewPrefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
+    source "{{ $brewPrefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+  elif [ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]; then
+    source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+  fi
+{{ else -}}
+{{ "  " }}[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ] && source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+{{ end -}}
+fi
+unset _zle_ok
