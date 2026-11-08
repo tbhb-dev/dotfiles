@@ -3,7 +3,10 @@
   "cleanupPeriodDays": 7,
   "env": {
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "commit.signoff",
+    "GIT_CONFIG_VALUE_0": "false"
   },
   "attribution": {
     "commit": "",
@@ -164,17 +167,49 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/tony/.claude/hooks/guard-exit-echo.pl",
+            "command": "{{ .chezmoi.homeDir }}/.claude/hooks/guard-exit-echo.pl",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/Users/tony/.claude/hooks/rewrite-bsd-sed-i.pl",
+            "command": "{{ .chezmoi.homeDir }}/.claude/hooks/rewrite-bsd-sed-i.pl",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/Users/tony/.claude/hooks/rewrite-zsh-equals.pl",
+            "command": "{{ .chezmoi.homeDir }}/.claude/hooks/rewrite-zsh-equals.pl",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|SendMessage|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I {{ .chezmoi.homeDir }}/.claude/hooks/state-guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I {{ .chezmoi.homeDir }}/.claude/hooks/state-guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I {{ .chezmoi.homeDir }}/.claude/hooks/state-guard.py",
             "timeout": 10
           }
         ]
