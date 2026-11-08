@@ -9,6 +9,13 @@
 Include ~/.orbstack/ssh/config
 
 {{ end -}}
+{{ if not $isDevcontainer -}}
+# Same rule as .zprofile: over ssh or inside an agent harness, never use an
+# agent (an inherited SSH_AUTH_SOCK may still be 1Password's); keys on disk only.
+Match exec "test -n \"$SSH_CONNECTION$CLAUDECODE$CODEX_HOME\""
+  IdentityAgent none
+
+{{ end -}}
 {{ if and $isDarwin (not $isDevcontainer) -}}
 Host *
   IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"

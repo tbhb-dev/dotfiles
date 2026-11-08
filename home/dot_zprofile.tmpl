@@ -25,11 +25,20 @@ export LESS_TERMCAP_so=$'\e[1;44;33m'
 export LESS_TERMCAP_ue=$'\e[0m'
 export LESS_TERMCAP_us=$'\e[1;32m'
 
+# Over ssh (peer agents, remote shells) and inside agent harnesses, never point
+# at the 1Password agent: a request from there raises Touch ID on a screen
+# nobody is watching. A forwarded agent, if any, stays as sshd set it.
+if [ -z "${SSH_CONNECTION-}" ] && [ -z "${CLAUDECODE-}" ] && [ -z "${CODEX_HOME-}" ]; then
 {{ if $isDarwin -}}
-export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+  export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
 {{ else if and $isLinux (not $isDevcontainer) -}}
-export SSH_AUTH_SOCK="$HOME/.1password/agent.sock"
+  export SSH_AUTH_SOCK="$HOME/.1password/agent.sock"
 {{ end -}}
+else
+  case "${SSH_AUTH_SOCK-}" in
+    *1password*) unset SSH_AUTH_SOCK ;;
+  esac
+fi
 {{ if not $isDevcontainer -}}
 export OP_ACCOUNT="{{ keyring "chezmoi" "op-account" }}"
 {{ end -}}
