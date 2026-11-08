@@ -20,23 +20,3 @@ Host *
   IdentitiesOnly no
 
 {{ end -}}
-Host evedata-htz-eu-fsn-hzl-srv01 evedata-hzl
-    HostName 144.76.203.197
-    User root
-
-Host evedata-htz-eu-fsn-stg-srv01 evedata-stg
-    HostName 157.90.209.174
-    User root
-
-Host evedata-htz-eu-fsn-prd-srv01 evedata-prd
-    HostName 188.34.142.232
-    User root
-
-Host evedata-*
-    Port 22
-    ForwardAgent no
-    Compression yes
-    TCPKeepAlive yes
-    StrictHostKeyChecking ask
-    ServerAliveInterval 60
-    ServerAliveCountMax 3

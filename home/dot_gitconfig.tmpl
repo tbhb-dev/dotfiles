@@ -92,8 +92,6 @@
 {{- if not $isDevcontainer }}
 [includeIf "gitdir/i:{{ .chezmoi.homeDir }}/Code/github.com/corvinvale/"]
   path = {{ .chezmoi.homeDir }}/Code/github.com/corvinvale/.gitconfig
-[includeIf "gitdir/i:{{ .chezmoi.homeDir }}/Code/github.com/evedata/"]
-  path = {{ .chezmoi.homeDir }}/Code/github.com/corvinvale/.gitconfig
 [includeIf "gitdir/i:{{ .chezmoi.homeDir }}/Code/github.com/owenjacobs/"]
   path = {{ .chezmoi.homeDir }}/Code/github.com/owenjacobs/.gitconfig
 [includeIf "gitdir/i:{{ .chezmoi.homeDir }}/Code/github.com/valeantindustries/"]

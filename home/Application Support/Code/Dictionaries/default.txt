@@ -140,8 +140,6 @@ euxo
 EVECLI
 evecrawler
 evecrawlerrc
-evedata
-evedataguide
 evemcp
 evemcprc
 everc

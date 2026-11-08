@@ -236,8 +236,6 @@ section "SSH Config"
 # --------------------------------------------------------------------------
 assert_file_not_contains ~/.ssh/config IdentityAgent \
   "~/.ssh/config excludes IdentityAgent"
-assert_file_contains ~/.ssh/config evedata-hzl \
-  "~/.ssh/config contains evedata-hzl host"
 
 # --------------------------------------------------------------------------
 section "Tool Availability"
