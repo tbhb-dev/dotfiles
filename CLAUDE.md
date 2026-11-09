@@ -76,6 +76,8 @@ Directories that hold credentials carry the `private_` attribute in the source (
 
 Mac-only trees (`Library`, `Application Support`, `.config/agent-safehouse`) are listed in `home/.chezmoiignore` and skipped off macOS.
 
+To make zsh a Linux host's login shell, run `sudo -n chsh -s /usr/bin/zsh <user>`. Plain `chsh` asks for the account password through PAM, which fails on accounts with no usable password.
+
 ## Multi-Platform Considerations
 
 This repo targets three environments: macOS (Apple Silicon), Ubuntu, and devcontainers. Use Chezmoi's templating to handle platform differences:
