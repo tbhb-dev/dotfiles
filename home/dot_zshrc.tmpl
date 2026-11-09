@@ -74,6 +74,7 @@ alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 eval "$(mise activate zsh)"
 (( _zle_ok )) && eval "$(starship init zsh)"
 
+{{ if $isDarwin -}}
 # agent-safehouse
 SAFEHOUSE_APPEND_PROFILE="$HOME/.config/agent-safehouse/local-overrides.sb"
 
@@ -82,7 +83,7 @@ safe-claude() { safe claude --dangerously-skip-permissions "$@"; }
 safe-claude-workspace() { safe --add-dirs=$PWD/.. -- claude --dangerously-skip-permissions "$@"; }
 safe-codex() { safe codex --dangerously-bypass-approvals-and-sandbox "$@"; }
 safe-codex-workspace() { safe --add-dirs=$PWD/.. -- codex --dangerously-bypass-approvals-and-sandbox "$@"; }
-
+{{ end }}
 # Claude Code with the awrel channel. Development channels are opted into per
 # session on the command line; settings.json can't enable them. So when this
 # repo's .mcp.json defines an awrel server, add the flag. Subcommands (claude
