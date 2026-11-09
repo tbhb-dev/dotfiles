@@ -15,7 +15,7 @@
 {{- end }}
 [credential "https://github.com"]
 	helper =
-{{- if $isDevcontainer }}
+{{- if or $isDevcontainer $isLinux }}
 	helper = !gh auth git-credential
 {{- else }}
 	helper = !{{ $brewPrefix }}/bin/gh auth git-credential
@@ -77,7 +77,7 @@
 	submoduleSummary = true
 [credential "https://gist.github.com"]
 	helper =
-{{- if $isDevcontainer }}
+{{- if or $isDevcontainer $isLinux }}
 	helper = !gh auth git-credential
 {{- else }}
 	helper = !{{ $brewPrefix }}/bin/gh auth git-credential
