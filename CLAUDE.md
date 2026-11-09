@@ -33,16 +33,16 @@ The `.chezmoiroot` file sets `home/` as the source root. All managed dotfiles go
 | `home/dot_zprofile.tmpl` | `~/.zprofile` | Login shell: PATH, env vars, tool environments |
 | `home/dot_zshrc.tmpl` | `~/.zshrc` | Interactive shell: completions, plugins, aliases, prompt |
 | `home/dot_tmux.conf.tmpl` | `~/.tmux.conf` | tmux: prefix, panes, vi keys, TPM plugins |
-| `home/dot_config/mise/config.toml` | `~/.config/mise/config.toml` | mise tool versions (starship, kubectl, ruby) |
-| `home/dot_config/starship.toml` | `~/.config/starship.toml` | Starship prompt configuration |
+| `home/private_dot_config/mise/config.toml` | `~/.config/mise/config.toml` | mise tool versions (starship, kubectl, ruby) |
+| `home/private_dot_config/starship.toml` | `~/.config/starship.toml` | Starship prompt configuration |
 | `home/private_Library/.../private_Code/User/settings.json` | `~/Library/.../Code/User/settings.json` | VS Code user settings |
 | `home/private_Library/.../private_Code/User/keybindings.json` | `~/Library/.../Code/User/keybindings.json` | VS Code keybindings |
 | `home/private_Library/.../private_Code/User/snippets/ruby.json` | `~/Library/.../Code/User/snippets/ruby.json` | VS Code Ruby snippets |
 | `home/dot_gitignore` | `~/.gitignore` | Global git ignore patterns |
 | `home/dot_gitconfig.tmpl` | `~/.gitconfig` | Git configuration (user, aliases, signing) |
 | `home/private_dot_ssh/private_config.tmpl` | `~/.ssh/config` | SSH hosts, 1Password agent |
-| `home/dot_config/nvim/` | `~/.config/nvim/` | Neovim (LazyVim) configuration |
-| `home/dot_config/gh/config.yml` | `~/.config/gh/config.yml` | GitHub CLI configuration |
+| `home/private_dot_config/nvim/` | `~/.config/nvim/` | Neovim (LazyVim) configuration |
+| `home/private_dot_config/private_gh/private_config.yml` | `~/.config/gh/config.yml` | GitHub CLI configuration |
 | `home/dot_docker/daemon.json` | `~/.docker/daemon.json` | Docker daemon settings |
 | `home/run_onchange_after_install-vscode-extensions.sh.tmpl` | _(run script)_ | Install VS Code extensions |
 | `home/run_once_after_cleanup-vscode-profiles.sh.tmpl` | _(run script)_ | One-time profile cleanup |
@@ -71,6 +71,8 @@ All `.tmpl` files share a common preamble:
 ## Per-host settings
 
 chezmoi derives file modes from the umask. On a host with `umask 0002`, modes in `chezmoi diff` shift (644 to 664, 755 to 775) even though the source is unchanged. Set `umask = 0o022` at the top level of that host's chezmoi config file. The gh config source is `private_config.yml` so it stays mode 0600 on any umask.
+
+Directories that hold credentials carry the `private_` attribute in the source (`.claude`, `.config`, `.config/gh`, `.local`, `.local/share/gh`), so they are 0700 on every host regardless of umask. Other directories take the umask default, so a `umask 0002` host shows 775 versus 755 in `chezmoi diff` unless its chezmoi config sets `umask = 0o022`.
 
 Mac-only trees (`Library`, `Application Support`, `.config/agent-safehouse`) are listed in `home/.chezmoiignore` and skipped off macOS.
 
