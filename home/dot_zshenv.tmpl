@@ -1,1 +1,8 @@
 export EDITOR=nvim
+{{ if eq .chezmoi.os "darwin" -}}
+# Non-interactive zsh (ssh host cmd, scripts) skips .zprofile, so Homebrew's bin dir is missing there.
+case ":$PATH:" in
+  *":/opt/homebrew/bin:"*) ;;
+  *) export PATH="/opt/homebrew/bin:$PATH" ;;
+esac
+{{ end -}}
