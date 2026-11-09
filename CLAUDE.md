@@ -14,7 +14,6 @@ chezmoi apply --force      # Apply, overwriting external modifications
 chezmoi diff               # Preview what would change
 chezmoi execute-template < home/file.tmpl  # Test template rendering
 chezmoi add ~/.<file>      # Add a dotfile to be managed
-chezmoi secret keyring set --service chezmoi --user <key>  # Store a secret
 ```
 
 ## Repository Structure
@@ -67,13 +66,13 @@ All `.tmpl` files share a common preamble:
 
 ## Secrets
 
-The 1Password account ID is stored in the system keyring, not in plaintext:
+`.zprofile` exports `OP_ACCOUNT=my.1password.com` in interactive terminals only, after the `SSH_CONNECTION`, `CLAUDECODE` and `CODEX_HOME` check, so ssh sessions and agents never inherit it. Devcontainers skip it. Nothing is read from a secret store at render time, so `chezmoi apply` and `chezmoi diff` need no seeding and no keyring entry.
 
-```bash
-chezmoi secret keyring set --service chezmoi --user op-account
-```
+## Per-host settings
 
-This must be set before `chezmoi apply` on non-devcontainer machines. In devcontainers, the `OP_ACCOUNT` block is skipped via the `$isDevcontainer` conditional.
+chezmoi derives file modes from the umask. On a host with `umask 0002`, modes in `chezmoi diff` shift (644 to 664, 755 to 775) even though the source is unchanged. Set `umask = 0o022` at the top level of that host's chezmoi config file. The gh config source is `private_config.yml` so it stays mode 0600 on any umask.
+
+Mac-only trees (`Library`, `Application Support`, `.config/agent-safehouse`) are listed in `home/.chezmoiignore` and skipped off macOS.
 
 ## Multi-Platform Considerations
 
