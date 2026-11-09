@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
-"""Set the Claude Code hooks that dotfiles owns in ~/.claude/settings.json.
+"""Set the Claude Code settings that dotfiles owns in ~/.claude/settings.json.
 
 chezmoi runs this script with the live file on stdin and writes what it prints.
-Dotfiles owns three PreToolUse hooks on Bash, the Perl scripts in
-~/.claude/hooks. Every other key and hook stays as it is, including the entries
-that `tbhbdev alpha install` writes. A file that already has the hooks prints
-back unchanged, so chezmoi diff shows no change for it.
+Dotfiles enforces three PreToolUse hooks on Bash, the Perl scripts in
+~/.claude/hooks. It also supplies the base settings in
+.chezmoitemplates/claude-settings-base.json, but only for a top-level key the
+file lacks, so a host keeps its live values and a fresh host gets the full base.
+Every other key and hook stays as it is, including the entries that
+`tbhbdev alpha install` writes. A file that already has all of it prints back
+unchanged, so chezmoi diff shows no change for it.
 """
 
 import json
 import sys
 
 HOME = {{ .chezmoi.homeDir | quote }}
+BASE = json.loads({{ includeTemplate "claude-settings-base.json" . | quote }})
 OWNED = ("guard-exit-echo.pl", "rewrite-bsd-sed-i.pl", "rewrite-zsh-equals.pl")
 
 
@@ -52,8 +56,17 @@ def set_hooks(data):
     return changed
 
 
+def set_base(data):
+    """Return True when it added a base key."""
+    missing = [key for key in BASE if key not in data]
+    for key in missing:
+        data[key] = BASE[key]
+    return bool(missing)
+
+
 text = sys.stdin.read()
 data = json.loads(text) if text.strip() else {}
-if set_hooks(data):
+changed = set_base(data)
+if set_hooks(data) or changed:
     text = json.dumps(data, indent=2) + "\n"
 sys.stdout.write(text)
