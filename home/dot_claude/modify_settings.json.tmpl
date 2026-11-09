@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Set the Claude Code hooks that dotfiles owns in ~/.claude/settings.json.
+
+chezmoi runs this script with the live file on stdin and writes what it prints.
+Dotfiles owns three PreToolUse hooks on Bash, the Perl scripts in
+~/.claude/hooks. Every other key and hook stays as it is, including the entries
+that `tbhbdev alpha install` writes. A file that already has the hooks prints
+back unchanged, so chezmoi diff shows no change for it.
+"""
+
+import json
+import sys
+
+HOME = {{ .chezmoi.homeDir | quote }}
+OWNED = ("guard-exit-echo.pl", "rewrite-bsd-sed-i.pl", "rewrite-zsh-equals.pl")
+
+
+def owned(name):
+    return {
+        "command": f"{HOME}/.claude/hooks/{name}",
+        "timeout": 10,
+        "type": "command",
+    }
+
+
+def basename(hook):
+    return str(hook.get("command", "")).rsplit("/", 1)[-1]
+
+
+def set_hooks(data):
+    """Return True when it changed the hooks."""
+    pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    entries = [e for e in pre if e.get("matcher") == "Bash"]
+    ours = [e for e in entries if any(basename(h) in OWNED for h in e.get("hooks", []))]
+    entry = ours[0] if ours else None
+    if entry is None:
+        entry = {"hooks": [], "matcher": "Bash"}
+        pre.insert(0, entry)
+    hooks = entry.setdefault("hooks", [])
+    changed = False
+    for name in OWNED:
+        want = owned(name)
+        found = [h for h in hooks if basename(h) == name]
+        if found:
+            if found[0] != want:
+                found[0].clear()
+                found[0].update(want)
+                changed = True
+        else:
+            hooks.append(want)
+            changed = True
+    return changed
+
+
+text = sys.stdin.read()
+data = json.loads(text) if text.strip() else {}
+if set_hooks(data):
+    text = json.dumps(data, indent=2) + "\n"
+sys.stdout.write(text)
