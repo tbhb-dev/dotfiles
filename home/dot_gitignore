@@ -22,3 +22,5 @@ mise.local.toml
 **/.claude/settings.local.json
 .claude/worktrees/
 .ruby-lsp/
+
+**/.claude/.cc-writes/

@@ -82,3 +82,9 @@ Use `gh api` (which requires confirmation) only when you actually need to mutate
 This is macOS, but GNU comes first on PATH: coreutils, findutils, gawk, gnu-sed, gnu-tar. Write GNU syntax and don't downgrade to BSD spellings on account of the platform — `date -d`, `stat -c`, `head -n -1`, `sed -i` with no `''` argument are all correct here, and their BSD counterparts (`date -v`, `stat -f`) are not.
 
 Scripts that will run somewhere else — CI, a container, a stock macOS box — can't assume any of that. Write those portably.
+
+## Worktrees
+
+Every worktree goes in its own clone's `.worktrees/` directory: `~/Code/github.com/<org>/<repo>/.worktrees/<name>`. Never create a worktree, a second clone or a scratch copy at the top level of `~/Code/github.com/<org>` (no `<repo>-<branch>` siblings). The main worktree stays on clean, current `main`. Remove your worktree with `git worktree remove` once its PR is merged or closed.
+
+@~/.claude/CLAUDE.private.md
