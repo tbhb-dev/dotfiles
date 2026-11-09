@@ -2,4 +2,5 @@
 Library
 Application Support
 .config/agent-safehouse
+.bash_profile
 {{- end }}
