@@ -79,7 +79,11 @@ Use `gh api` (which requires confirmation) only when you actually need to mutate
 
 ## Shell userland
 
+{{ if eq .chezmoi.os "darwin" -}}
 This is macOS, but GNU comes first on PATH: coreutils, findutils, gawk, gnu-sed, gnu-tar. Write GNU syntax and don't downgrade to BSD spellings on account of the platform — `date -d`, `stat -c`, `head -n -1`, `sed -i` with no `''` argument are all correct here, and their BSD counterparts (`date -v`, `stat -f`) are not.
+{{- else -}}
+This is Linux{{ if and (hasKey .chezmoi "kernel") (contains "microsoft" (lower .chezmoi.kernel.osrelease)) }} under WSL2{{ end }}, where GNU coreutils, findutils, gawk, sed and tar are the system defaults. Write GNU syntax: `date -d`, `stat -c`, `head -n -1` and `sed -i` with no `''` argument all work here.
+{{- end }}
 
 Scripts that will run somewhere else — CI, a container, a stock macOS box — can't assume any of that. Write those portably.
 
