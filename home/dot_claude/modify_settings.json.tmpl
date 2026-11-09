@@ -16,6 +16,9 @@ import sys
 
 HOME = {{ .chezmoi.homeDir | quote }}
 BASE = json.loads({{ includeTemplate "claude-settings-base.json" . | quote }})
+{{- if ne .chezmoi.os "darwin" }}
+BASE.pop("statusLine", None)  # macOS-only command path
+{{- end }}
 OWNED = ("guard-exit-echo.pl", "rewrite-bsd-sed-i.pl", "rewrite-zsh-equals.pl")
 
 
