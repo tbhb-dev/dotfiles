@@ -1,0 +1,5 @@
+# Login bash gets ~/.local/bin on PATH, matching .zprofile.
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
