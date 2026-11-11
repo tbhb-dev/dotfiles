@@ -230,6 +230,7 @@ section "Devcontainer Exclusions — Git"
 assert_git_config_not_set commit.gpgsign
 assert_git_config_not_set tag.gpgsign
 assert_git_config_not_set user.signingkey
+assert_file_not_contains ~/.gitconfig "agent-git-signing"
 
 # --------------------------------------------------------------------------
 section "SSH Config"

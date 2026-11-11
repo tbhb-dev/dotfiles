@@ -96,4 +96,8 @@
   path = {{ .chezmoi.homeDir }}/Code/github.com/owenjacobs/.gitconfig
 [includeIf "gitdir/i:{{ .chezmoi.homeDir }}/Code/github.com/valeantindustries/"]
   path = {{ .chezmoi.homeDir }}/Code/github.com/valeantindustries/.gitconfig
+[includeIf "gitdir:{{ .chezmoi.homeDir }}/Code/github.com/tbhb-dev/"]
+	path = {{ .chezmoi.homeDir }}/.config/devtools/agent-git-signing.gitconfig
+[includeIf "gitdir:{{ .chezmoi.homeDir }}/Code/scratch/"]
+	path = {{ .chezmoi.homeDir }}/.config/devtools/agent-git-signing.gitconfig
 {{- end }}
