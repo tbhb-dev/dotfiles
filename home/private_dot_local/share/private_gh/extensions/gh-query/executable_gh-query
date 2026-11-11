@@ -1,46 +1,86 @@
 #!/bin/bash
-# gh-query: Read-only wrapper for `gh api` — blocks mutating HTTP methods.
+# gh-query: Read-only wrapper for `gh api`. Blocks:
+#   - any explicit method other than GET or HEAD (compared case-insensitively)
+#   - --input, which sends a request body
+#   - the graphql endpoint, which always POSTs
+# Field flags (-f, -F, --field, --raw-field) make `gh api` POST by default,
+# so without an explicit method they are sent as GET query parameters.
 # Usage: gh query [gh api flags] <endpoint>
 set -euo pipefail
 
+has_method=0
+has_field=0
 i=1
 while [ "$i" -le "$#" ]; do
     arg="${!i}"
     case "$arg" in
         -X|--method)
+            has_method=1
             i=$((i + 1))
             method="${!i:-}"
             case "$method" in
-                POST|PUT|PATCH|DELETE)
+                [Gg][Ee][Tt]|[Hh][Ee][Aa][Dd])
+                    ;;
+                *)
                     echo "error: 'gh query' is read-only; use 'gh api' for mutating calls" >&2
                     exit 1
                     ;;
             esac
             ;;
         -X*)
+            has_method=1
             method="${arg:2}"
             case "$method" in
-                POST|PUT|PATCH|DELETE)
+                [Gg][Ee][Tt]|[Hh][Ee][Aa][Dd])
+                    ;;
+                *)
                     echo "error: 'gh query' is read-only; use 'gh api' for mutating calls" >&2
                     exit 1
                     ;;
             esac
             ;;
         --method=*)
+            has_method=1
             method="${arg#--method=}"
             case "$method" in
-                POST|PUT|PATCH|DELETE)
+                [Gg][Ee][Tt]|[Hh][Ee][Aa][Dd])
+                    ;;
+                *)
                     echo "error: 'gh query' is read-only; use 'gh api' for mutating calls" >&2
                     exit 1
                     ;;
             esac
             ;;
-        --input)
+        -f|-F|--field|--raw-field)
+            has_field=1
+            i=$((i + 1))
+            ;;
+        -f*|-F*|--field=*|--raw-field=*)
+            has_field=1
+            ;;
+        -[!-]?*)
+            # Combined short flags (pflag): -iX POST or -if a=b would hide a method or field flag.
+            case "${arg:1}" in
+                *[XfF]*)
+                    echo "error: 'gh query' cannot check combined short flags; pass -X/-f/-F as separate flags" >&2
+                    exit 1
+                    ;;
+            esac
+            ;;
+        --input|--input=*)
             echo "error: 'gh query' is read-only; --input sends a request body. Use 'gh api' for mutating calls" >&2
+            exit 1
+            ;;
+        graphql)
+            echo "error: 'gh query' is read-only; the graphql endpoint always POSTs. Use 'gh api graphql' for GraphQL" >&2
             exit 1
             ;;
     esac
     i=$((i + 1))
 done
+
+if [ "$has_field" -eq 1 ] && [ "$has_method" -eq 0 ]; then
+    exec gh api --method GET "$@"
+fi
 
 exec gh api "$@"
