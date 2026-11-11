@@ -7,7 +7,6 @@
 # so without an explicit method they are sent as GET query parameters.
 # Usage: gh query [gh api flags] <endpoint>
 set -euo pipefail
-shopt -s nocasematch
 
 has_method=0
 has_field=0
@@ -20,7 +19,7 @@ while [ "$i" -le "$#" ]; do
             i=$((i + 1))
             method="${!i:-}"
             case "$method" in
-                GET|HEAD)
+                [Gg][Ee][Tt]|[Hh][Ee][Aa][Dd])
                     ;;
                 *)
                     echo "error: 'gh query' is read-only; use 'gh api' for mutating calls" >&2
@@ -32,7 +31,7 @@ while [ "$i" -le "$#" ]; do
             has_method=1
             method="${arg:2}"
             case "$method" in
-                GET|HEAD)
+                [Gg][Ee][Tt]|[Hh][Ee][Aa][Dd])
                     ;;
                 *)
                     echo "error: 'gh query' is read-only; use 'gh api' for mutating calls" >&2
@@ -44,7 +43,7 @@ while [ "$i" -le "$#" ]; do
             has_method=1
             method="${arg#--method=}"
             case "$method" in
-                GET|HEAD)
+                [Gg][Ee][Tt]|[Hh][Ee][Aa][Dd])
                     ;;
                 *)
                     echo "error: 'gh query' is read-only; use 'gh api' for mutating calls" >&2
@@ -58,6 +57,15 @@ while [ "$i" -le "$#" ]; do
             ;;
         -f*|-F*|--field=*|--raw-field=*)
             has_field=1
+            ;;
+        -[!-]?*)
+            # Combined short flags (pflag): -iX POST or -if a=b would hide a method or field flag.
+            case "${arg:1}" in
+                *[XfF]*)
+                    echo "error: 'gh query' cannot check combined short flags; pass -X/-f/-F as separate flags" >&2
+                    exit 1
+                    ;;
+            esac
             ;;
         --input|--input=*)
             echo "error: 'gh query' is read-only; --input sends a request body. Use 'gh api' for mutating calls" >&2
