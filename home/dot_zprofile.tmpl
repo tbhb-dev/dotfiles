@@ -47,6 +47,15 @@ export AWS_REGION=us-east-1
 
 export RUBY_YJIT_ENABLE=1
 
+# Claude Code: skip the per-agent status-line summaries (see ~/.local/share/no-agent-summary.js).
+# Only if the file exists: BUN_OPTIONS naming a missing preload stops Claude Code from starting.
+if [ -f "$HOME/.local/share/no-agent-summary.js" ]; then
+  case " ${BUN_OPTIONS-} " in
+    *" --preload=$HOME/.local/share/no-agent-summary.js "*) ;;
+    *) export BUN_OPTIONS="${BUN_OPTIONS:+$BUN_OPTIONS }--preload=$HOME/.local/share/no-agent-summary.js" ;;
+  esac
+fi
+
 {{ if $isDarwin -}}
 export PATH="{{ $brewPrefix }}/opt/coreutils/libexec/gnubin:$PATH"
 export PATH="{{ $brewPrefix }}/opt/curl/bin:$PATH"
