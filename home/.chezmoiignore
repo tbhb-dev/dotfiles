@@ -3,4 +3,7 @@ Library
 Application Support
 .config/agent-safehouse
 .bash_profile
+.config/tmux-powerline
+{{- else }}
+.config/tmux-status
 {{- end }}
