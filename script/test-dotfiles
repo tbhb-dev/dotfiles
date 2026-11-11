@@ -237,6 +237,8 @@ section "SSH Config"
 # --------------------------------------------------------------------------
 assert_file_not_contains ~/.ssh/config IdentityAgent \
   "~/.ssh/config excludes IdentityAgent"
+assert_file_not_contains ~/.ssh/config "Hostname" \
+  "~/.ssh/config has no short-host aliases unless the host opts in"
 
 # --------------------------------------------------------------------------
 section "Tool Availability"

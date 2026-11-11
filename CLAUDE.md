@@ -78,6 +78,8 @@ Mac-only trees (`Library`, `Application Support`, `.config/agent-safehouse`) are
 
 A host where agents commit sets `agentSigningIncludes = true` under `[data]` in its chezmoi config. That adds the `includeIf` blocks that make commits under `~/Code/github.com/tbhb-dev/` and `~/Code/scratch/` use `~/.config/devtools/agent-git-signing.gitconfig`. Leave it unset on a host where tbhb commits by hand, since those commits would sign with the agent key.
 
+A host where bare short host names should resolve sets two keys under `[data]` in its chezmoi config: `sshShortHostPrefix`, a string, and `sshShortHostPatterns`, a list of ssh `Host` patterns. `~/.ssh/config` then gets `Host <patterns>` with `Hostname <prefix>%h`, so `ssh ab01` connects to `<prefix>ab01` without waiting on a failing lookup of the short name. Both keys must be set; with either missing the block is omitted. The names live only in each host's own config, never in this repo.
+
 To make zsh a Linux host's login shell, run `sudo -n chsh -s /usr/bin/zsh <user>`. Plain `chsh` asks for the account password through PAM, which fails on accounts with no usable password.
 
 ## Multi-Platform Considerations
