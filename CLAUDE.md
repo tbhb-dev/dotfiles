@@ -76,6 +76,8 @@ Directories that hold credentials carry the `private_` attribute in the source (
 
 Mac-only trees (`Library`, `Application Support`, `.config/agent-safehouse`) are listed in `home/.chezmoiignore` and skipped off macOS.
 
+A host where agents commit sets `agentSigningIncludes = true` under `[data]` in its chezmoi config. That adds the `includeIf` blocks that make commits under `~/Code/github.com/tbhb-dev/` and `~/Code/scratch/` use `~/.config/devtools/agent-git-signing.gitconfig`. Leave it unset on a host where tbhb commits by hand, since those commits would sign with the agent key.
+
 To make zsh a Linux host's login shell, run `sudo -n chsh -s /usr/bin/zsh <user>`. Plain `chsh` asks for the account password through PAM, which fails on accounts with no usable password.
 
 ## Multi-Platform Considerations
