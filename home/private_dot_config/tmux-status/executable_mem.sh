@@ -9,7 +9,7 @@ if [ "$(uname)" = Darwin ]; then
 		/^Pages purgeable/ { purge = $3 }
 		/^Pages wired down/ { wired = $4 }
 		/^Pages occupied by compressor/ { comp = $5 }
-		END { printf "%.0f%%", (anon - purge + wired + comp) * size / total * 100 }'
+		END { printf "%.0f%% ", (anon - purge + wired + comp) * size / total * 100 }'
 else
-	awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } END { if (t > 0) printf "%.0f%%", (t - a) / t * 100 }' /proc/meminfo
+	awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } END { if (t > 0) printf "%.0f%% ", (t - a) / t * 100 }' /proc/meminfo
 fi

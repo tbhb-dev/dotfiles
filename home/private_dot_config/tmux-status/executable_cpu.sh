@@ -6,4 +6,4 @@ if [ "$(uname)" = Darwin ]; then
 else
 	idle=$(top -b -n 1 | awk '/Cpu\(s\)/ { for (i = 1; i < NF; i++) if ($(i + 1) ~ /^id/) v = $i } END { print v }')
 fi
-[ -n "$idle" ] && awk -v idle="$idle" 'BEGIN { printf "%.0f%%", 100 - idle }'
+[ -n "$idle" ] && awk -v idle="$idle" 'BEGIN { printf "%.0f%% ", 100 - idle }'

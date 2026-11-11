@@ -53,7 +53,7 @@ set -g status-justify centre
 set -g status-left-length 60
 set -g status-right-length 90
 set -g status-left '#[fg=#78dce8,bg=default]#[fg=#2d2a2e,bg=#78dce8] #h #[fg=#78dce8,bg=#ab9df2]#[fg=#2d2a2e,bg=#ab9df2] #S #[fg=#ab9df2,bg=default]'
-set -g status-right '#[fg=#403e41,bg=default]#[fg=#fc9867,bg=#403e41]#({{ .chezmoi.homeDir }}/.config/tmux-status/cpu.sh) #({{ .chezmoi.homeDir }}/.config/tmux-status/mem.sh) #[fg=#959394]%F %H:%M#[fg=#403e41,bg=default]'
+set -g status-right '#[fg=#403e41,bg=default]#[fg=#fc9867,bg=#403e41]#({{ .chezmoi.homeDir }}/.config/tmux-status/cpu.sh)#({{ .chezmoi.homeDir }}/.config/tmux-status/mem.sh)#[fg=#959394]%F %H:%M#[fg=#403e41,bg=default]'
 set -g window-status-separator ' '
 set -g window-status-current-format '#[fg=#a9dc76,bg=default]#[fg=#2d2a2e,bg=#a9dc76,bold]#I#[fg=#a9dc76,bg=#8ab866,nobold]#[fg=#2d2a2e,bg=#8ab866] #W#[fg=#8ab866,bg=default]'
 set -g window-status-format '#[fg=#403e41,bg=default]#[fg=#959394,bg=#403e41]#I#[fg=#403e41,bg=#4a474b]#[fg=#959394,bg=#4a474b] #W#[fg=#4a474b,bg=default]'
