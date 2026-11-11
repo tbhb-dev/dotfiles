@@ -271,9 +271,9 @@ section "File Content Spot Checks"
 assert_file_contains ~/.tmux.conf "prefix C-q" \
   ".tmux.conf sets prefix to C-q"
 assert_file_not_contains ~/.tmux.conf "tmux-powerline" \
-  ".tmux.conf has no tmux-powerline plugin on Linux"
+  ".tmux.conf has no tmux-powerline plugin"
 assert_file_contains ~/.tmux.conf "tmux-status/cpu.sh" \
-  ".tmux.conf status line uses the native cpu segment on Linux"
+  ".tmux.conf status line uses the native cpu segment"
 assert_file_exists ~/.config/tmux-status/cpu.sh
 assert_file_exists ~/.config/tmux-status/mem.sh
 assert_file_contains ~/.zshrc "mise activate zsh" \
