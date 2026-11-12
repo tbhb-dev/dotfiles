@@ -61,7 +61,9 @@ set -g window-status-format '#[fg=#403e41,bg=default]#[fg=#959394,bg=#403e41]
 if-shell '[ -f {{ .chezmoi.homeDir }}/.tmux/plugins/tpm/tpm ]' \
   'run "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm/tpm"'
 
-# Add empty line above the status bar for padding
+# Add empty line above the status bar for padding. Reset the array first, so
+# a reload copies tmux's default row 0 again and not the '' left by the last load.
+set -gu status-format
 set -g status 2
 set -gF status-format[1] '#{status-format[0]}'
 set -g status-format[0] ''
