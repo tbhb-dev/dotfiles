@@ -98,4 +98,5 @@ This repo targets three environments: macOS (Apple Silicon), Ubuntu, and devcont
 - **Runtime management:** mise (polyglot version manager)
 - **Docker:** Binaries symlinked from Docker.app to `~/.docker/bin`, completions from `~/.docker/completions`
 - **Terminal multiplexing:** tmux with per-terminal sockets (Ghostty, Zed, VS Code)
+- **tmux status line:** hand-written, on every OS: native `status-left`, `status-right` and `window-status-*` formats in `.tmux.conf` (Monokai Pro pills, refreshed every second), with the cpu and mem segments as small scripts under `~/.config/tmux-status` called through `#()`. tmux-powerline is gone; `.chezmoiremove` clears its config directory and plugin clone from hosts that still have them.
 - **PATH:** GNU coreutils/sed/tar/curl prioritized over BSD defaults via Homebrew (macOS only)
