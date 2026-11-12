@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+toml-version = "v1.0.0"
+
+[files]
+exclude = ["home/**", ".venv/**/*.toml", "tmp/**/*.toml", "bazel-*/**/*.toml", ".bazel-*/**/*.toml", "**/testdata/**/*.toml", "**/uv.lock", "**/mise.lock"]
+
+[schema]
+enabled = true
+strict = false
+
+[[schemas]]
+path = "tombi://www.schemastore.org/pyproject.json"
+include = ["**/pyproject.toml"]
+
+[schemas.format.rules.array-values-order]
+enabled = false
+
+[schemas.format.rules.table-keys-order]
+enabled = false

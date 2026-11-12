@@ -7,9 +7,9 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # Preflight: devcontainer CLI must be available
 # ---------------------------------------------------------------------------
 if ! command -v devcontainer &>/dev/null; then
-  echo "ERROR: 'devcontainer' CLI not found."
-  echo "Install it with: npm install -g @devcontainers/cli"
-  exit 1
+	echo "ERROR: 'devcontainer' CLI not found."
+	echo "Install it with: npm install -g @devcontainers/cli"
+	exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -17,7 +17,7 @@ fi
 # ---------------------------------------------------------------------------
 up_args=(--workspace-folder "$REPO_ROOT")
 if [[ "${REMOVE_EXISTING:-}" == "true" ]]; then
-  up_args+=(--remove-existing-container)
+	up_args+=(--remove-existing-container)
 fi
 
 echo "==> Starting devcontainer…"
@@ -29,19 +29,19 @@ devcontainer up "${up_args[@]}"
 echo "==> Running tests…"
 rc=0
 devcontainer exec --workspace-folder "$REPO_ROOT" \
-  zsh -lic "source ~/dotfiles/script/test-dotfiles" || rc=$?
+	zsh -lic "source ~/dotfiles/script/test-dotfiles" || rc=$?
 
 # ---------------------------------------------------------------------------
 # Teardown (unless KEEP_CONTAINER=true)
 # ---------------------------------------------------------------------------
 if [[ "${KEEP_CONTAINER:-}" == "true" ]]; then
-  echo "==> Keeping container (KEEP_CONTAINER=true)"
+	echo "==> Keeping container (KEEP_CONTAINER=true)"
 else
-  echo "==> Removing container…"
-  cid=$(docker ps -aq --filter "label=devcontainer.local_folder=$REPO_ROOT")
-  if [[ -n "$cid" ]]; then
-    docker rm -f "$cid" >/dev/null
-  fi
+	echo "==> Removing container…"
+	cid=$(docker ps -aq --filter "label=devcontainer.local_folder=$REPO_ROOT")
+	if [[ -n "$cid" ]]; then
+		docker rm -f "$cid" >/dev/null
+	fi
 fi
 
 exit "$rc"

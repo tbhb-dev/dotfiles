@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+---
+# Main quality gate. Bazel pins every tool and owns every gate: the
+# hermetic checks are cached `bazel test` targets, so `bazel test //...`
+# runs them all, and the few that need the network, Git history or the
+# GitHub API run as their own steps after it. A final `conclusion` job gives
+# branch protection one stable required check.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Bazel 9.x only, the version .bazelversion pins, on Linux (x86_64 and
+  # arm64), macOS (arm64) and Windows (x86_64). The checks that need the
+  # network or GitHub's API run on Linux only; they do not depend on the OS.
+  bazel:
+    name: "bazel (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, windows-2025]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The shared repository checks scan the complete history.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Bazel for CI
+        uses: tbhb-dev/rules/.github/actions/setup-bazel-ci@6bfd6513af811a8f1f262c94ec3ca51254e16d26  # main
+        with:
+          disk-cache: ${{ github.workflow }}-${{ matrix.os }}
+          cache-save: ${{ github.event_name != 'pull_request' }}
+
+      # Run the repository checks defined in BUILD.bazel.
+      - name: Test
+        run: bazelisk test --config=ci //...
+
+      # A failed run's test logs, so a failure that does not recur can still
+      # be read.
+      - name: Keep the test logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: testlogs-${{ matrix.os }}
+          path: |
+            .bazel-testlogs/**/test.log
+            .bazel-testlogs/**/test.xml
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  # The repository-level checks, on Linux beside the bazel matrix, so they
+  # don't wait behind the tests. There are no Python dependencies to audit.
+  repo:
+    name: repo
+    permissions:
+      contents: read
+    uses: tbhb-dev/rules/.github/workflows/repo-checks.yml@6bfd6513af811a8f1f262c94ec3ca51254e16d26  # main
+    with:
+      gazelle-dirs: ""
+      pip-audit-target: ""
+      module-dirs: ""
+      govulncheck-target: ""
+
+  # One stable required check for branch protection. `if: always()` runs it
+  # even when a needed job failed. It passes only when every needed job's
+  # result is exactly "success", so a gate that was skipped, cancelled or
+  # never finished cannot pass. A matrix with a cancelled leg reports
+  # "abandoned", not "cancelled", so the check lists what passes, not what
+  # fails.
+  conclusion:
+    name: conclusion
+    if: always()
+    needs: [bazel, repo]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any needed job did not succeed
+        uses: tbhb-dev/rules/.github/actions/ci-conclusion@6bfd6513af811a8f1f262c94ec3ca51254e16d26  # main
+        with:
+          needs: ${{ toJSON(needs) }}

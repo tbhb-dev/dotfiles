@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+---
+extends: conditional
+first: \b([A-Z]{3,5})\b
+ignorecase: false
+level: suggestion
+link: https://developers.google.com/style/abbreviations
+message: Spell out '%s', if it's unfamiliar to the audience.
+second: (?:\b[A-Z][a-z]+ )+\(([A-Z]{3,5})\)

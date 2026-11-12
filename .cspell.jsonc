@@ -1,0 +1,25 @@
+{
+  "language": "en",
+  "ignorePaths": [
+    "home/**/*",
+    ".mise/**/*",
+    ".rumdl_cache/**/*",
+    ".vale/**/*",
+    ".venv/**/*",
+    "bazel-*/**/*",
+    ".bazel-*/**/*",
+    "coverage.xml",
+    "MODULE.bazel.lock",
+    "mise.lock",
+    "tmp/**/*",
+    "uv.lock"
+  ],
+  "dictionaryDefinitions": [
+    {
+      "name": "tbhb-dev/dotfiles",
+      "path": "./.cspell-words.txt",
+      "addWords": true
+    }
+  ],
+  "dictionaries": ["tbhb-dev/dotfiles", "python"]
+}

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+---
+action:
+  name: replace
+extends: substitution
+ignorecase: false
+level: warning
+link: https://developers.google.com/style/word-list
+message: Use '%s' instead of '%s'.

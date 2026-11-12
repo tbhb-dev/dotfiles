@@ -57,7 +57,7 @@ The `.chezmoiroot` file sets `home/` as the source root. All managed dotfiles go
 
 All `.tmpl` files share a common preamble:
 
-```
+```text
 {{- $isDarwin := eq .chezmoi.os "darwin" -}}
 {{- $isLinux := eq .chezmoi.os "linux" -}}
 {{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}

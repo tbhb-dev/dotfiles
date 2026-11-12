@@ -1,0 +1,11 @@
+{
+  "Exclude": [
+    "^home/",
+    "^bazel-",
+    "^\\.bazel-",
+    "^\\.mise/",
+    "^\\.vale/(Google|write-good|proselint|ai-tells.*)/",
+    "^\\.venv/",
+    "^tmp/"
+  ]
+}

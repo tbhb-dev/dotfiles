@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+---
+extends: capitalization
+level: warning
+match: $sentence
+message: 'AI formatting: this heading uses Title Case. AI chatbots default to capitalizing
+  all main words in headings. Use sentence case instead.'
+scope: heading
+style: AP
