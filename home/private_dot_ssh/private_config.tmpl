@@ -1,6 +1,9 @@
 {{- $isDarwin := eq .chezmoi.os "darwin" -}}
 {{- $isLinux := eq .chezmoi.os "linux" -}}
 {{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- /* Opt-in per host: a prefix and short-name patterns from the chezmoi data, so no host names live in this public repo. */ -}}
+{{- $sshShortPrefix := dig "sshShortHostPrefix" "" . -}}
+{{- $sshShortPatterns := dig "sshShortHostPatterns" (list) . -}}
 
 {{ if $isDarwin -}}
 # Added by OrbStack: 'orb' SSH host for Linux machines
@@ -14,6 +17,12 @@ Include ~/.orbstack/ssh/config
 # agent (an inherited SSH_AUTH_SOCK may still be 1Password's); keys on disk only.
 Match exec "case $SSH_CONNECTION$CLAUDECODE$CODEX_HOME in '') exit 1;; esac"
   IdentityAgent none
+
+{{ end -}}
+{{ if and $sshShortPrefix $sshShortPatterns -}}
+# Expand a bare short name to its full name, so ssh doesn't wait on a failing lookup of the short one.
+Host {{ join " " $sshShortPatterns }}
+  Hostname {{ $sshShortPrefix }}%h
 
 {{ end -}}
 {{ if and $isDarwin (not $isDevcontainer) -}}
