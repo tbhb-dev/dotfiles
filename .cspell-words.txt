@@ -49,6 +49,7 @@ trixie
 uncomparables
 worktrees
 yjit
+zizmor
 zprofile
 zshenv
 zshrc
