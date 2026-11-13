@@ -37,10 +37,10 @@ for os in darwin linux; do
 	done
 done
 
-# Nothing reads a secret store at render time: no op:// reference and no
-# private account address in any output.
-if grep -rIl 'tbhb-dev\.1password\.com\|op://' "${out}" >/dev/null; then
-	echo "FAIL a rendered file names a private 1Password address or an op:// reference"
+# Nothing reads a secret store at render time: no op:// reference in any
+# output, and the only 1password.com name is the OP_ACCOUNT literal below.
+if grep -rIl 'op://' "${out}" >/dev/null; then
+	echo "FAIL a rendered file holds an op:// reference"
 	fail=1
 fi
 if grep -rhI '1password\.com' "${out}" | grep -v 'OP_ACCOUNT="my\.1password\.com"' >/dev/null; then

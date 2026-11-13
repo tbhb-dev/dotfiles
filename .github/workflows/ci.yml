@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   # Bazel 9.x only, the version .bazelversion pins, on Linux (x86_64 and
-  # arm64), macOS (arm64) and Windows (x86_64). The checks that need the
+  # arm64) and macOS (arm64). This repository targets no Windows host. The checks that need the
   # network or GitHub's API run on Linux only; they do not depend on the OS.
   bazel:
     name: "bazel (${{ matrix.os }})"
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, windows-2025]
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26]
     defaults:
       run:
         shell: bash
