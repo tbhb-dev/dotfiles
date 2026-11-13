@@ -35,7 +35,7 @@ The `.chezmoiroot` file sets `home/` as the source root. All managed dotfiles go
 | `home/dot_tmux.conf.tmpl` | `~/.tmux.conf` | tmux: prefix, panes, vi keys, TPM plugins |
 | `home/private_dot_config/mise/config.toml` | `~/.config/mise/config.toml` | mise tool versions (starship, kubectl, ruby) |
 | `home/private_dot_config/starship.toml` | `~/.config/starship.toml` | Starship prompt configuration |
-| `home/private_Library/.../private_Code/User/settings.json` | `~/Library/.../Code/User/settings.json` | VS Code user settings |
+| `home/private_Library/.../private_Code/User/settings.json.tmpl` | `~/Library/.../Code/User/settings.json` | VS Code user settings |
 | `home/private_Library/.../private_Code/User/keybindings.json` | `~/Library/.../Code/User/keybindings.json` | VS Code keybindings |
 | `home/private_Library/.../private_Code/User/snippets/ruby.json` | `~/Library/.../Code/User/snippets/ruby.json` | VS Code Ruby snippets |
 | `home/dot_gitignore` | `~/.gitignore` | Global git ignore patterns |

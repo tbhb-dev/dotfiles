@@ -13,7 +13,7 @@
 ;; Manual policy-only example (no generator):
 ;;   Replace the next line with:
 ;;     (define HOME_DIR "/Users/alice")
-(define HOME_DIR "/Users/tony")
+(define HOME_DIR "{{ .chezmoi.homeDir }}")
 
 (define (home-subpath rel) (subpath (string-append HOME_DIR rel)))
 (define (home-literal rel) (literal (string-append HOME_DIR rel)))
@@ -1024,7 +1024,7 @@
 
 ;; #safehouse-test-id:dynamic-cli-grants# Additional dynamic path grants from wizard input.
 
-;; Generated ancestor directory literals for extra read-only path: /Users/tony/Code
+;; Generated ancestor directory literals for extra read-only path: {{ .chezmoi.homeDir }}/Code
 ;;
 ;; Why file-read* (not file-read-metadata) with literal (not subpath):
 ;; Agents (notably Claude Code) call readdir() on every ancestor of the working
@@ -1035,13 +1035,13 @@
 (allow file-read*
     (literal "/")
     (literal "/Users")
-    (literal "/Users/tony")
-    (literal "/Users/tony/Code")
+    (literal "{{ .chezmoi.homeDir }}")
+    (literal "{{ .chezmoi.homeDir }}/Code")
 )
 
-(allow file-read* (subpath "/Users/tony/Code"))
+(allow file-read* (subpath "{{ .chezmoi.homeDir }}/Code"))
 
-;; Generated ancestor directory literals for extra read-only path: /Users/tony/Downloads
+;; Generated ancestor directory literals for extra read-only path: {{ .chezmoi.homeDir }}/Downloads
 ;;
 ;; Why file-read* (not file-read-metadata) with literal (not subpath):
 ;; Agents (notably Claude Code) call readdir() on every ancestor of the working
@@ -1052,13 +1052,13 @@
 (allow file-read*
     (literal "/")
     (literal "/Users")
-    (literal "/Users/tony")
-    (literal "/Users/tony/Downloads")
+    (literal "{{ .chezmoi.homeDir }}")
+    (literal "{{ .chezmoi.homeDir }}/Downloads")
 )
 
-(allow file-read* (subpath "/Users/tony/Downloads"))
+(allow file-read* (subpath "{{ .chezmoi.homeDir }}/Downloads"))
 
-;; Generated ancestor directory literals for extra read-only path: /Users/tony/Pictures
+;; Generated ancestor directory literals for extra read-only path: {{ .chezmoi.homeDir }}/Pictures
 ;;
 ;; Why file-read* (not file-read-metadata) with literal (not subpath):
 ;; Agents (notably Claude Code) call readdir() on every ancestor of the working
@@ -1069,13 +1069,13 @@
 (allow file-read*
     (literal "/")
     (literal "/Users")
-    (literal "/Users/tony")
-    (literal "/Users/tony/Pictures")
+    (literal "{{ .chezmoi.homeDir }}")
+    (literal "{{ .chezmoi.homeDir }}/Pictures")
 )
 
-(allow file-read* (subpath "/Users/tony/Pictures"))
+(allow file-read* (subpath "{{ .chezmoi.homeDir }}/Pictures"))
 
-;; Generated ancestor directory literals for extra read-only path: /Users/tony/Documents
+;; Generated ancestor directory literals for extra read-only path: {{ .chezmoi.homeDir }}/Documents
 ;;
 ;; Why file-read* (not file-read-metadata) with literal (not subpath):
 ;; Agents (notably Claude Code) call readdir() on every ancestor of the working
@@ -1086,13 +1086,13 @@
 (allow file-read*
     (literal "/")
     (literal "/Users")
-    (literal "/Users/tony")
-    (literal "/Users/tony/Documents")
+    (literal "{{ .chezmoi.homeDir }}")
+    (literal "{{ .chezmoi.homeDir }}/Documents")
 )
 
-(allow file-read* (subpath "/Users/tony/Documents"))
+(allow file-read* (subpath "{{ .chezmoi.homeDir }}/Documents"))
 
-;; Generated ancestor directory literals for extra read/write path: /Users/tony/.cache
+;; Generated ancestor directory literals for extra read/write path: {{ .chezmoi.homeDir }}/.cache
 ;;
 ;; Why file-read* (not file-read-metadata) with literal (not subpath):
 ;; Agents (notably Claude Code) call readdir() on every ancestor of the working
@@ -1103,11 +1103,11 @@
 (allow file-read*
     (literal "/")
     (literal "/Users")
-    (literal "/Users/tony")
-    (literal "/Users/tony/.cache")
+    (literal "{{ .chezmoi.homeDir }}")
+    (literal "{{ .chezmoi.homeDir }}/.cache")
 )
 
-(allow file-read* file-write* (subpath "/Users/tony/.cache"))
+(allow file-read* file-write* (subpath "{{ .chezmoi.homeDir }}/.cache"))
 
 (allow file-read* file-write*
     (home-subpath "/.gnupg")
@@ -1220,7 +1220,7 @@
 
 ;; ---------------------------------------------------------------------------
 ;; Dynamic grant: ~/Code (read/write)
-;; Supersedes the read-only /Users/tony/Code grant above (safe to leave
+;; Supersedes the read-only {{ .chezmoi.homeDir }}/Code grant above (safe to leave
 ;; that one in place; allow rules are additive).
 (allow file-read* file-write*
     (home-subpath "/Code")
