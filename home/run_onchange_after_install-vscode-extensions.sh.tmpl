@@ -1,7 +1,7 @@
 {{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
 {{- if not $isDevcontainer -}}
 #!/bin/bash
-# extensions hash: {{ include "private_Library/private_Application Support/private_Code/User/settings.json" | sha256sum }}
+# extensions hash: {{ include "private_Library/private_Application Support/private_Code/User/settings.json.tmpl" | sha256sum }}
 if ! command -v code >/dev/null 2>&1; then
   echo "VS Code CLI not found, skipping extension install"
   exit 0
