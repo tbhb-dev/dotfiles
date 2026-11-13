@@ -8,7 +8,9 @@ Dotfiles enforces three PreToolUse hooks on Bash, the Perl scripts in
 file lacks, so a host keeps its live values and a fresh host gets the full base.
 The one exception is permissions.deny: base entries the live list lacks are
 appended to it, so a new deny rule reaches a host that already has permissions.
-Nothing is ever removed from the live list.
+Nothing is ever removed from the live list. A permissions that is not an
+object, or a deny that is not a list, stops the script with a nonzero exit and
+no output.
 Every other key and hook stays as it is, including the entries that
 `tbhbdev alpha install` writes. A file that already has all of it prints back
 unchanged, so chezmoi diff shows no change for it.
@@ -69,6 +71,10 @@ def set_base(data):
         data[key] = BASE[key]
     changed = bool(missing)
     if "permissions" not in missing:
+        if not isinstance(data["permissions"], dict):
+            sys.exit("modify_settings: permissions is not an object")
+        if "deny" in data["permissions"] and not isinstance(data["permissions"]["deny"], list):
+            sys.exit("modify_settings: permissions.deny is not a list")
         deny = data["permissions"].setdefault("deny", [])
         for entry in BASE.get("permissions", {}).get("deny", []):
             if entry not in deny:

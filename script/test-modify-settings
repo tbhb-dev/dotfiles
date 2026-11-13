@@ -38,7 +38,7 @@ PY
 }
 
 # A host whose permissions exist: keeps its own entries, gains exactly the missing base ones.
-live='{"permissions":{"allow":["Bash(ls:*)"],"deny":["Bash(host only:*)","Bash(rm -rf /:*)"]},"model":"x"}'
+live='{"hooks":{"Stop":[{"keep":1}]},"permissions":{"allow":["Bash(ls:*)"],"ask":["Bash(ask:*)"],"defaultMode":"plan","deny":["Bash(host only:*)","Bash(rm -rf /:*)"]},"model":"x"}'
 out="$(python3 "${work}/modify.py" <<<"${live}")"
 check_json "${out}" '
 missing = [e for e in base if e != "Bash(rm -rf /:*)"]
@@ -46,8 +46,8 @@ dd = d["permissions"]["deny"]
 ok = dd[:2] == ["Bash(host only:*)", "Bash(rm -rf /:*)"] and dd[2:] == missing
 ' || rc=$?
 check "existing permissions gain exactly the missing base deny entries, in order, and lose none"
-check_json "${out}" 'ok = d["permissions"]["allow"] == ["Bash(ls:*)"] and d["model"] == "x"' || rc=$?
-check "other live keys are untouched"
+check_json "${out}" 'ok = d["permissions"]["allow"] == ["Bash(ls:*)"] and d["permissions"]["ask"] == ["Bash(ask:*)"] and d["permissions"]["defaultMode"] == "plan" and d["model"] == "x" and d["hooks"]["Stop"] == [{"keep": 1}]' || rc=$?
+check "ask, allow, defaultMode, hooks and model are untouched"
 
 # Idempotent: a second run changes nothing.
 again="$(python3 "${work}/modify.py" <<<"${out}")"
@@ -58,5 +58,29 @@ check "second run prints the file back unchanged"
 out2="$(python3 "${work}/modify.py" <<<'{"permissions":{"allow":[]}}')"
 check_json "${out2}" 'ok = d["permissions"]["deny"] == base' || rc=$?
 check "permissions with no deny list gets the whole base list"
+
+# Malformed permissions or deny: exit nonzero with empty stdout, never a silent pass.
+all_rules="$(
+	python3 - "${work}/modify.py" <<'PY'
+import json, sys
+src = open(sys.argv[1]).read()
+line = [l for l in src.splitlines() if l.startswith("BASE = ")][0]
+rules = eval(line[len("BASE = "):])["permissions"]["deny"]
+print(json.dumps({"dict": {r: True for r in rules}, "string": " ".join(rules)}))
+PY
+)"
+reject() { # label, live json
+	local got
+	rc=0
+	got="$(python3 "${work}/modify.py" <<<"$2" 2>/dev/null)" || rc=$?
+	[[ ${rc} -ne 0 && -z "${got}" ]] && rc=0 || rc=1
+	check "$1"
+}
+dict_deny="$(python3 -c 'import json,sys; print(json.dumps({"permissions":{"deny":json.loads(sys.argv[1])["dict"]}}))' "${all_rules}")"
+string_deny="$(python3 -c 'import json,sys; print(json.dumps({"permissions":{"deny":json.loads(sys.argv[1])["string"]}}))' "${all_rules}")"
+reject "a deny dict keyed by every base rule is rejected" "${dict_deny}"
+reject "a deny string holding every base rule is rejected" "${string_deny}"
+reject "a null deny is rejected" '{"permissions":{"deny":null}}'
+reject "a non-object permissions is rejected" '{"permissions":"deny everything"}'
 
 exit "${fails}"
