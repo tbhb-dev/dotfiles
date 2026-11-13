@@ -83,4 +83,23 @@ reject "a deny string holding every base rule is rejected" "${string_deny}"
 reject "a null deny is rejected" '{"permissions":{"deny":null}}'
 reject "a non-object permissions is rejected" '{"permissions":"deny everything"}'
 
+# removeAllowEntries: drops exactly the named allow entries, keeps the rest in order,
+# is idempotent, and with the key unset removes nothing (the runs above).
+printf '[data]\nremoveAllowEntries = ["Bash(drop one:*)", "Bash(drop two:*)"]\n' >"${work}/remove.toml"
+"${CHEZMOI_BIN:-chezmoi}" execute-template --config "${work}/remove.toml" --source "${root}/home" <"${root}/home/private_dot_claude/modify_settings.json.tmpl" >"${work}/modify-remove.py"
+remove_live='{"permissions":{"allow":["Bash(keep a:*)","Bash(drop one:*)","Bash(keep b:*)","Bash(drop two:*)","Bash(drop one:*) extra"],"deny":[]}}'
+rout="$(python3 "${work}/modify-remove.py" <<<"${remove_live}")"
+check_json "${rout}" 'ok = d["permissions"]["allow"] == ["Bash(keep a:*)", "Bash(keep b:*)", "Bash(drop one:*) extra"]' || rc=$?
+check "removeAllowEntries drops only the exact entries named and keeps the rest in order"
+again_rm="$(python3 "${work}/modify-remove.py" <<<"${rout}")"
+[[ "${again_rm}" == "${rout}" ]] || rc=1
+check "a second run with removeAllowEntries prints the file back unchanged"
+keep="$(python3 "${work}/modify.py" <<<"${remove_live}")"
+check_json "${keep}" 'ok = len(d["permissions"]["allow"]) == 5' || rc=$?
+check "with removeAllowEntries unset no allow entry is removed"
+rc=0
+python3 "${work}/modify-remove.py" <<<'{"permissions":{"allow":"x","deny":[]}}' >/dev/null 2>&1 || rc=$?
+[[ ${rc} -ne 0 ]] && rc=0 || rc=1
+check "a non-list allow with removeAllowEntries set exits nonzero"
+
 exit "${fails}"
