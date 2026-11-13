@@ -6,6 +6,9 @@ Dotfiles enforces three PreToolUse hooks on Bash, the Perl scripts in
 ~/.claude/hooks. It also supplies the base settings in
 .chezmoitemplates/claude-settings-base.json, but only for a top-level key the
 file lacks, so a host keeps its live values and a fresh host gets the full base.
+The one exception is permissions.deny: base entries the live list lacks are
+appended to it, so a new deny rule reaches a host that already has permissions.
+Nothing is ever removed from the live list.
 Every other key and hook stays as it is, including the entries that
 `tbhbdev alpha install` writes. A file that already has all of it prints back
 unchanged, so chezmoi diff shows no change for it.
@@ -60,11 +63,18 @@ def set_hooks(data):
 
 
 def set_base(data):
-    """Return True when it added a base key."""
+    """Return True when it added a base key or a base deny entry."""
     missing = [key for key in BASE if key not in data]
     for key in missing:
         data[key] = BASE[key]
-    return bool(missing)
+    changed = bool(missing)
+    if "permissions" not in missing:
+        deny = data["permissions"].setdefault("deny", [])
+        for entry in BASE.get("permissions", {}).get("deny", []):
+            if entry not in deny:
+                deny.append(entry)
+                changed = True
+    return changed
 
 
 text = sys.stdin.read()

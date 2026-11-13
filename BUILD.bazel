@@ -213,6 +213,18 @@ sh_test(
     env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
 )
 
+# Checks the deny-list merge in modify_settings.json.tmpl against sample live
+# files, with the pinned chezmoi. No network, no secret store.
+sh_test(
+    name = "modify_settings_test",
+    srcs = ["script/test-modify-settings"],
+    data = [
+        ":chezmoi",
+        "//:home_files",
+    ],
+    env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
+)
+
 filegroup(
     name = "home_files",
     srcs = glob(

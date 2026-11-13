@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Tests for home/private_dot_claude/modify_settings.json.tmpl: renders the
+# script with chezmoi, runs it on sample live files, and checks the deny merge.
+# Needs chezmoi (CHEZMOI_BIN overrides the one on PATH) and python3. No network
+# and no secret store.
+set -euo pipefail
+
+root="${TEST_SRCDIR:+${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}}"
+root="${root:-$(cd "$(dirname "$0")/.." && pwd)}"
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+: >"${work}/chezmoi.toml"
+
+"${CHEZMOI_BIN:-chezmoi}" execute-template --config "${work}/chezmoi.toml" --source "${root}/home" <"${root}/home/private_dot_claude/modify_settings.json.tmpl" >"${work}/modify.py"
+
+fails=0
+rc=0
+check() { # label; reads the status of the command just run from rc, then resets it
+	if [[ ${rc} -eq 0 ]]; then echo "PASS  $1"; else
+		echo "FAIL  $1"
+		fails=$((fails + 1))
+	fi
+	rc=0
+}
+
+# check_json <json> <python snippet over d (the output) and base (the base deny list) that sets ok>
+check_json() {
+	python3 - "${work}/modify.py" "$1" "$2" <<'PY'
+import json, sys
+src = open(sys.argv[1]).read()
+line = [l for l in src.splitlines() if l.startswith("BASE = ")][0]
+base = eval(line[len("BASE = "):])["permissions"]["deny"]
+d = json.loads(sys.argv[2])
+ns = {"d": d, "base": base}
+exec(sys.argv[3], ns)
+sys.exit(0 if ns["ok"] else 1)
+PY
+}
+
+# A host whose permissions exist: keeps its own entries, gains exactly the missing base ones.
+live='{"permissions":{"allow":["Bash(ls:*)"],"deny":["Bash(host only:*)","Bash(rm -rf /:*)"]},"model":"x"}'
+out="$(python3 "${work}/modify.py" <<<"${live}")"
+check_json "${out}" '
+missing = [e for e in base if e != "Bash(rm -rf /:*)"]
+dd = d["permissions"]["deny"]
+ok = dd[:2] == ["Bash(host only:*)", "Bash(rm -rf /:*)"] and dd[2:] == missing
+' || rc=$?
+check "existing permissions gain exactly the missing base deny entries, in order, and lose none"
+check_json "${out}" 'ok = d["permissions"]["allow"] == ["Bash(ls:*)"] and d["model"] == "x"' || rc=$?
+check "other live keys are untouched"
+
+# Idempotent: a second run changes nothing.
+again="$(python3 "${work}/modify.py" <<<"${out}")"
+[[ "${again}" == "${out}" ]] || rc=1
+check "second run prints the file back unchanged"
+
+# Permissions without a deny list gets the full base deny list.
+out2="$(python3 "${work}/modify.py" <<<'{"permissions":{"allow":[]}}')"
+check_json "${out2}" 'ok = d["permissions"]["deny"] == base' || rc=$?
+check "permissions with no deny list gets the whole base list"
+
+exit "${fails}"
