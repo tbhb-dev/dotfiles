@@ -8,9 +8,14 @@ Dotfiles enforces three PreToolUse hooks on Bash, the Perl scripts in
 file lacks, so a host keeps its live values and a fresh host gets the full base.
 The one exception is permissions.deny: base entries the live list lacks are
 appended to it, so a new deny rule reaches a host that already has permissions.
-Nothing is ever removed from the live list. A permissions that is not an
+Nothing is ever removed from the live deny list. A permissions that is not an
 object, or a deny that is not a list, stops the script with a nonzero exit and
 no output.
+The one removal is permissions.allow: a host lists exact entries under
+removeAllowEntries in its own chezmoi data, and the script drops those entries
+from the live allow list. The names stay in the host's config, not in this repo.
+With the key unset it removes nothing. A value that is not a list of strings
+stops the script with a nonzero exit and no output.
 Every other key and hook stays as it is, including the entries that
 `tbhbdev alpha install` writes. A file that already has all of it prints back
 unchanged, so chezmoi diff shows no change for it.
@@ -21,6 +26,9 @@ import sys
 
 HOME = {{ .chezmoi.homeDir | quote }}
 BASE = json.loads({{ includeTemplate "claude-settings-base.json" . | quote }})
+REMOVE_ALLOW = json.loads({{ dig "removeAllowEntries" (list) . | toJson | quote }})
+if not isinstance(REMOVE_ALLOW, list) or not all(isinstance(e, str) for e in REMOVE_ALLOW):
+    sys.exit("modify_settings: removeAllowEntries is not a list of strings")
 {{- if ne .chezmoi.os "darwin" }}
 BASE.pop("statusLine", None)  # macOS-only command path
 {{- end }}
@@ -83,9 +91,24 @@ def set_base(data):
     return changed
 
 
+def drop_allow(data):
+    """Return True when it removed an entry named in removeAllowEntries."""
+    if not REMOVE_ALLOW:
+        return False
+    allow = data["permissions"].get("allow", [])
+    if not isinstance(allow, list):
+        sys.exit("modify_settings: permissions.allow is not a list")
+    kept = [entry for entry in allow if entry not in REMOVE_ALLOW]
+    if len(kept) == len(allow):
+        return False
+    data["permissions"]["allow"] = kept
+    return True
+
+
 text = sys.stdin.read()
 data = json.loads(text) if text.strip() else {}
 changed = set_base(data)
+changed = drop_allow(data) or changed
 if set_hooks(data) or changed:
     text = json.dumps(data, indent=2) + "\n"
 sys.stdout.write(text)

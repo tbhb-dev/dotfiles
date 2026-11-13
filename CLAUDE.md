@@ -80,6 +80,8 @@ A host where agents commit sets `agentSigningIncludes = true` under `[data]` in 
 
 A host where bare short host names should resolve sets two keys under `[data]` in its chezmoi config: `sshShortHostPrefix`, a string, and `sshShortHostPatterns`, a list of ssh `Host` patterns. `~/.ssh/config` then gets `Host <patterns>` with `Hostname <prefix>%h`, so `ssh ab01` connects to `<prefix>ab01` without waiting on a failing lookup of the short name. Both keys must be set; with either missing the block is omitted. The names live only in each host's own config, never in this repo.
 
+A host that must drop exact entries from the live `permissions.allow` list sets `removeAllowEntries`, a list of strings, under `[data]` in its chezmoi config. `modify_settings.json.tmpl` removes those entries on apply and nothing else; with the key unset it removes nothing. The entry text lives only in each host's own config, never in this repo.
+
 To make zsh a Linux host's login shell, run `sudo -n chsh -s /usr/bin/zsh <user>`. Plain `chsh` asks for the account password through PAM, which fails on accounts with no usable password.
 
 ## Multi-Platform Considerations
