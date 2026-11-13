@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+# The first build creates the repository-owned module lock.
+common --lockfile_mode=update
+common --symlink_prefix=.bazel-
+build:ci --color=yes
+test:ci --test_output=errors
+# Local runs that must also use the private gitleaks config:
+#   GITLEAKS_CONFIG_TOML=<host-cached file> bazelisk test --config=private-gitleaks //...
+test:private-gitleaks --@tbhb_rules//lint:gitleaks_private_config
+try-import %workspace%/.bazelrc.user

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+# An earlier commit's signingkey line in the gitconfig template holds a public
+# key fingerprint. It is not a secret, so gitleaks' generic-api-key rule is a
+# false positive here.
+e71963ecfcf509df09464de6751488ce23f3c93c:home/dot_gitconfig.tmpl:generic-api-key:14

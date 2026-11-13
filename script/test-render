@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Render every chezmoi template under fixed darwin and linux data, then check
+# the output. No network, no secret store: chezmoi runs with an empty config,
+# a fixed home directory and no 1Password account. The one 1Password name a
+# template may emit is the literal export OP_ACCOUNT="my.1password.com".
+set -euo pipefail
+
+root="${TEST_SRCDIR:+${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}}"
+root="${root:-$(cd "$(dirname "$0")/.." && pwd)}"
+src="${root}/home"
+out="$(mktemp -d)"
+trap 'rm -rf "${out}"' EXIT
+: >"${out}/chezmoi.toml"
+export HOME=/home/render
+export OP_ACCOUNT=''
+
+templates=()
+while IFS= read -r line; do
+	templates+=("${line}")
+done < <(find "${src}" -name '*.tmpl' | sort || true)
+
+fail=0
+count=0
+for os in darwin linux; do
+	data="{\"chezmoi\":{\"os\":\"${os}\",\"arch\":\"arm64\",\"homeDir\":\"/home/render\",\"username\":\"render\",\"hostname\":\"render\",\"sourceDir\":\"${src}\",\"kernel\":{\"osrelease\":\"6.0.0\"}}}"
+	for tmpl in "${templates[@]}"; do
+		name="${os}.$(basename "${tmpl}")"
+		if "${CHEZMOI_BIN:-chezmoi}" execute-template \
+			--source "${src}" --config "${out}/chezmoi.toml" \
+			--override-data "${data}" <"${tmpl}" >"${out}/${name}" 2>"${out}/err"; then
+			count=$((count + 1))
+		else
+			read -r first <"${out}/err" || first=''
+			echo "FAIL render ${os} ${tmpl#"${src}"/}: ${first}"
+			fail=1
+		fi
+	done
+done
+
+# Nothing reads a secret store at render time: no op:// reference in any
+# output, and the only 1password.com name is the OP_ACCOUNT literal below.
+if grep -rIl 'op://' "${out}" >/dev/null; then
+	echo "FAIL a rendered file holds an op:// reference"
+	fail=1
+fi
+if grep -rhI '1password\.com' "${out}" | grep -v 'OP_ACCOUNT="my\.1password\.com"' >/dev/null; then
+	echo "FAIL a rendered file mentions 1password.com outside OP_ACCOUNT=\"my.1password.com\""
+	fail=1
+fi
+
+if [[ "${fail}" -eq 0 ]]; then
+	echo "rendered ${count} files under darwin and linux data"
+fi
+exit "${fail}"

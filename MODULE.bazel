@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+"""Bootstrap workspace for tbhb-dev/dotfiles."""
+
+module(name = "tbhb_dev_dotfiles")
+
+bazel_dep(name = "tbhb_rules", version = "0.0.0", dev_dependency = True)
+git_override(
+    module_name = "tbhb_rules",
+    commit = "6bfd6513af811a8f1f262c94ec3ca51254e16d26",
+    remote = "https://github.com/tbhb-dev/rules.git",
+)
+
+# The tool binaries @tbhb_rules pins, so the bazel_env shims and CI name the
+# same repositories and each tool keeps one pin.
+tools = use_extension("@tbhb_rules//pins:extensions.bzl", "tools")
+use_repo(
+    tools,
+    "tbhb_rules_actionlint",
+    "tbhb_rules_cog",
+    "tbhb_rules_editorconfig_checker",
+    "tbhb_rules_gitleaks",
+    "tbhb_rules_rumdl",
+    "tbhb_rules_ryl",
+    "tbhb_rules_shellcheck",
+    "tbhb_rules_shfmt",
+    "tbhb_rules_tombi",
+    "tbhb_rules_vale",
+    "tbhb_rules_zizmor",
+)
+
+# Stable paths and PATH shims (.bazel_env/bin) for the Bazel-pinned tools,
+# which git hooks and editors call without starting Bazel.
+bazel_dep(name = "rules_shell", version = "0.6.1", dev_dependency = True)
+bazel_dep(name = "platforms", version = "1.0.0", dev_dependency = True)
+bazel_dep(name = "bazel_env.bzl", version = "0.10.0", dev_dependency = True)
+bazel_dep(name = "buildifier_prebuilt", version = "10.1.0", dev_dependency = True)
+
+# The Vale style packages .vale.ini lists under Packages, pinned by digest so
+# //:vale_test syncs them offline. Keep the URLs in step with .vale.ini.
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+http_file(
+    name = "vale_google",
+    dev_dependency = True,
+    downloaded_file_path = "Google.zip",
+    sha256 = "4b67fca1f2a88595b2a578ab98bbf3017a23af677b04f93e862843f3ea1a9a0b",
+    url = "https://github.com/errata-ai/Google/releases/download/v0.7.1/Google.zip",
+)
+
+http_file(
+    name = "vale_write_good",
+    dev_dependency = True,
+    downloaded_file_path = "write-good.zip",
+    sha256 = "2960ef10861ddc7dc76292a4967eb3789bf05ca24f862042f6d15f53332887f0",
+    url = "https://github.com/errata-ai/write-good/releases/download/v0.4.1/write-good.zip",
+)
+
+http_file(
+    name = "vale_proselint",
+    dev_dependency = True,
+    downloaded_file_path = "proselint.zip",
+    sha256 = "48b1fb481ba44f6505d44346b283f6cdc74efd234f913bbdb09bf34420fab81c",
+    url = "https://github.com/errata-ai/proselint/releases/download/v0.3.4/proselint.zip",
+)
+
+http_file(
+    name = "vale_ai_tells",
+    dev_dependency = True,
+    downloaded_file_path = "ai-tells.zip",
+    sha256 = "f8d1e981abbfbac1aa092d1623a1ac9bc935f0b15e8071e7a072915abddf0570",
+    url = "https://github.com/tbhb/vale-ai-tells/releases/download/v1.37.0/ai-tells.zip",
+)
+
+http_file(
+    name = "vale_ai_tells_experimental",
+    dev_dependency = True,
+    downloaded_file_path = "ai-tells-experimental.zip",
+    sha256 = "d628f719afead6812028c2a31802d87c7572a931d9b16e94f2874d95e9d597b8",
+    url = "https://github.com/tbhb/vale-ai-tells/releases/download/v1.37.0/ai-tells-experimental.zip",
+)
+
+# chezmoi, pinned for the render test so CI and every host render with the
+# same binary. The sha256 values come from the release's own checksums file.
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+_CHEZMOI_BUILD = """exports_files(["chezmoi"], visibility = ["//visibility:public"])"""
+
+http_archive(
+    name = "chezmoi_macos_arm64",
+    build_file_content = _CHEZMOI_BUILD,
+    sha256 = "ec2d0005f369c912ee9891a26c30d65dc0eda51708f06948e5f7a43db69e1aa7",
+    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.73.3/chezmoi_2.73.3_darwin_arm64.tar.gz"],
+)
+
+http_archive(
+    name = "chezmoi_linux_x86_64",
+    build_file_content = _CHEZMOI_BUILD,
+    sha256 = "6e5827598cbfc02d132b04f95b5ea10efb5b79230e2a4a0e52df4af144a8ee9f",
+    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.73.3/chezmoi_2.73.3_linux_amd64.tar.gz"],
+)
+
+http_archive(
+    name = "chezmoi_linux_arm64",
+    build_file_content = _CHEZMOI_BUILD,
+    sha256 = "c9e6a6e71eb5291018e161a8426d7c313cd2e8553c2ca4029511fec2a33bc28c",
+    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.73.3/chezmoi_2.73.3_linux_arm64.tar.gz"],
+)
