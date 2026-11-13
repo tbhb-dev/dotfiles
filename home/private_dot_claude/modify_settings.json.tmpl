@@ -14,7 +14,8 @@ no output.
 The one removal is permissions.allow: a host lists exact entries under
 removeAllowEntries in its own chezmoi data, and the script drops those entries
 from the live allow list. The names stay in the host's config, not in this repo.
-With the key unset it removes nothing.
+With the key unset it removes nothing. A value that is not a list of strings
+stops the script with a nonzero exit and no output.
 Every other key and hook stays as it is, including the entries that
 `tbhbdev alpha install` writes. A file that already has all of it prints back
 unchanged, so chezmoi diff shows no change for it.
@@ -26,6 +27,8 @@ import sys
 HOME = {{ .chezmoi.homeDir | quote }}
 BASE = json.loads({{ includeTemplate "claude-settings-base.json" . | quote }})
 REMOVE_ALLOW = json.loads({{ dig "removeAllowEntries" (list) . | toJson | quote }})
+if not isinstance(REMOVE_ALLOW, list) or not all(isinstance(e, str) for e in REMOVE_ALLOW):
+    sys.exit("modify_settings: removeAllowEntries is not a list of strings")
 {{- if ne .chezmoi.os "darwin" }}
 BASE.pop("statusLine", None)  # macOS-only command path
 {{- end }}
