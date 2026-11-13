@@ -1,5 +1,7 @@
 # Repository guide
 
+@AGENTS.md
+
 ## Overview
 
 This chezmoi-managed dotfiles repository targets macOS (Apple Silicon), Ubuntu, and devcontainers. chezmoi maps files from this repo to the home directory using its naming conventions: `dot_zshrc.tmpl` → `~/.zshrc`.
