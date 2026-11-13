@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Tony Burns
+
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+
+  // The presets track tbhb-dev/renovate-config's main branch, pinned by
+  // commit; Renovate bumps the pins (the "renovate-config" group).
+  extends: [
+    "github>tbhb-dev/renovate-config//default.json5#fa7ce6b2427e624b0de4542eb5a46e339c448b2b", // main
+    "github>tbhb-dev/renovate-config//bazel.json5#fa7ce6b2427e624b0de4542eb5a46e339c448b2b", // main
+  ],
+
+  // tbhb-dev/dotfiles: one Bazel module, no Go, so no go.json5.
+  // Nothing local is needed beyond the presets.
+}

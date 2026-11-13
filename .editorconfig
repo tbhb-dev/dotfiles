@@ -1,0 +1,20 @@
+root = true
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+[*.{bat,cmd}]
+end_of_line = crlf
+[*.go]
+indent_style = tab
+[{*.bzl,BUILD,BUILD.bazel,MODULE.bazel,WORKSPACE,*.bazelrc,.bazelrc}]
+indent_style = space
+indent_size = 2
+[*.{json,jsonc,json5}]
+[*.{yml,yaml}]
+[*.toml]
+[*.sh]
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off

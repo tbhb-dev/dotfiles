@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+---
+# PR gate for the Renovate config: strict validation plus a check that the
+# pinned preset references resolve.
+name: Validate Renovate configuration
+
+on:
+  pull_request:
+    paths:
+      - ".github/renovate.json5"
+      - ".github/workflows/renovate-config-validator.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    # yamllint disable-line rule:line-length
+    uses: tbhb-dev/renovate-config/.github/workflows/renovate-config-validator.yaml@fa7ce6b2427e624b0de4542eb5a46e339c448b2b  # main
+    with:
+      configs: .github/renovate.json5

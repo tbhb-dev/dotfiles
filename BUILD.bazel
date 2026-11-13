@@ -1,0 +1,223 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright Tony Burns
+
+load("@bazel_env.bzl", "bazel_env")
+load("@buildifier_prebuilt//:rules.bzl", "buildifier_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load(
+    "@tbhb_rules//lint:defs.bzl",
+    "actionlint_test",
+    "codeowners_test",
+    "cspell_test",
+    "editorconfig_checker_test",
+    "gitleaks_history",
+    "gitleaks_test",
+    "reuse_test",
+    "rumdl_test",
+    "ryl_test",
+    "shellcheck_test",
+    "shfmt_test",
+    "tombi_test",
+    "vale_sync",
+    "vale_test",
+    "zizmor_test",
+)
+load("@tbhb_rules//repo:defs.bzl", "repo_files", "repo_layout_test")
+
+repo_files(exclude = ["home/**"])
+
+gitleaks_test(
+    name = "gitleaks_test",
+    srcs = [":repo_files"],
+    config = ".gitleaks.toml",
+)
+
+gitleaks_history(
+    name = "gitleaks_history",
+    config = ".gitleaks.toml",
+)
+
+# The repository's shape. Only these top-level directories may exist; add a
+# new one here in the change that first uses it.
+repo_layout_test(
+    name = "repo_layout_test",
+    srcs = [":repo_files"],
+    top_level_dirs = [
+        ".claude",
+        ".devcontainer",
+        ".github",
+        ".vale",
+        "LICENSES",
+        "home",
+        "script",
+    ],
+)
+
+buildifier_test(
+    name = "buildifier_test",
+    exclude_patterns = [
+        "./.git/*",
+        "./.mise/*",
+        "./bazel-*",
+        "./.bazel-*",
+        "./.worktrees/*",
+        "./tmp/*",
+    ],
+    lint_mode = "warn",
+    lint_warnings = ["all"],
+    no_sandbox = True,
+    workspace = "//:MODULE.bazel",
+)
+
+# Copyright and licensing information on every file (REUSE.toml, LICENSES/).
+reuse_test(
+    name = "reuse_test",
+    srcs = [":repo_files"],
+)
+
+ryl_test(
+    name = "ryl_test",
+    srcs = [":repo_files"],
+    config = ".ryl.toml",
+)
+
+tombi_test(
+    name = "tombi_test",
+    srcs = [":repo_files"],
+    config = "tombi.toml",
+)
+
+rumdl_test(
+    name = "rumdl_test",
+    srcs = [":repo_files"],
+    config = ".rumdl.toml",
+)
+
+editorconfig_checker_test(
+    name = "editorconfig_checker_test",
+    srcs = [":repo_files"],
+    config = ".editorconfig-checker.json",
+)
+
+actionlint_test(
+    name = "actionlint_test",
+    srcs = [":repo_files"],
+)
+
+zizmor_test(
+    name = "zizmor_test",
+    srcs = [":repo_files"],
+    config = ".github/zizmor.yml",
+)
+
+shellcheck_test(
+    name = "shellcheck_test",
+    srcs = [":repo_files"],
+)
+
+shfmt_test(
+    name = "shfmt_test",
+    srcs = [":repo_files"],
+)
+
+codeowners_test(
+    name = "codeowners_test",
+    srcs = [":repo_files"],
+)
+
+cspell_test(
+    name = "cspell_test",
+    srcs = [":repo_files"],
+    config = ".cspell.jsonc",
+    data = [".cspell-words.txt"],
+)
+
+# The packages .vale.ini lists, pinned in MODULE.bazel, in the config's
+# order. `bazel run //:vale_sync` writes them into .vale/ for editors.
+VALE_PACKAGES = {
+    "Google": "@vale_google//file",
+    "ai-tells": "@vale_ai_tells//file",
+    "ai-tells-experimental": "@vale_ai_tells_experimental//file",
+    "proselint": "@vale_proselint//file",
+    "write-good": "@vale_write_good//file",
+}
+
+vale_test(
+    name = "vale_test",
+    srcs = [":repo_files"],
+    config = ".vale.ini",
+    packages = VALE_PACKAGES,
+)
+
+vale_sync(
+    name = "vale_sync",
+    config = ".vale.ini",
+    packages = VALE_PACKAGES,
+)
+
+# `bazel run //:bazel_env` puts shims for the Bazel-pinned tools in
+# .bazel_env/bin, which mise adds to PATH. Git hooks call them directly, so
+# a commit never waits on the Bazel server.
+bazel_env(
+    name = "bazel_env",
+    tools = {
+        "actionlint": "@tbhb_rules_actionlint//:actionlint",
+        "buildifier": "@buildifier_prebuilt//:buildifier",
+        "cog": "@tbhb_rules_cog//:cog",
+        "editorconfig-checker": "@tbhb_rules_editorconfig_checker//:editorconfig-checker",
+        "gitleaks": "@tbhb_rules_gitleaks//:gitleaks",
+        "rumdl": "@tbhb_rules_rumdl//:rumdl",
+        "ryl": "@tbhb_rules_ryl//:ryl",
+        "shellcheck": "@tbhb_rules_shellcheck//:shellcheck",
+        "shfmt": "@tbhb_rules_shfmt//:shfmt",
+        "tombi": "@tbhb_rules_tombi//:tombi",
+        "vale": "@tbhb_rules_vale//:vale",
+        "zizmor": "@tbhb_rules_zizmor//:zizmor",
+    },
+)
+
+config_setting(
+    name = "macos_arm64",
+    constraint_values = [
+        "@platforms//cpu:arm64",
+        "@platforms//os:macos",
+    ],
+)
+
+config_setting(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//cpu:arm64",
+        "@platforms//os:linux",
+    ],
+)
+
+alias(
+    name = "chezmoi",
+    actual = select({
+        ":linux_arm64": "@chezmoi_linux_arm64//:chezmoi",
+        ":macos_arm64": "@chezmoi_macos_arm64//:chezmoi",
+        "//conditions:default": "@chezmoi_linux_x86_64//:chezmoi",
+    }),
+)
+
+# Renders every chezmoi template under fixed darwin and linux data with the
+# pinned chezmoi, then checks the output. No network, no secret store.
+sh_test(
+    name = "render_test",
+    srcs = ["script/test-render"],
+    data = [
+        ":chezmoi",
+        "//:home_files",
+    ],
+    env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
+)
+
+filegroup(
+    name = "home_files",
+    srcs = glob(
+        ["home/**"],
+        allow_empty = False,
+        exclude_directories = 0,
+    ),
+)
