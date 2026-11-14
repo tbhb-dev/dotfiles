@@ -90,20 +90,20 @@ _CHEZMOI_BUILD = """exports_files(["chezmoi"], visibility = ["//visibility:publi
 http_archive(
     name = "chezmoi_macos_arm64",
     build_file_content = _CHEZMOI_BUILD,
-    sha256 = "ec2d0005f369c912ee9891a26c30d65dc0eda51708f06948e5f7a43db69e1aa7",
-    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.73.3/chezmoi_2.73.3_darwin_arm64.tar.gz"],
+    sha256 = "9d89672a597a9333ab47ea5173fcececb85c04864205686a7aa5699c3d8bd98c",
+    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_darwin_arm64.tar.gz"],
 )
 
 http_archive(
     name = "chezmoi_linux_x86_64",
     build_file_content = _CHEZMOI_BUILD,
-    sha256 = "6e5827598cbfc02d132b04f95b5ea10efb5b79230e2a4a0e52df4af144a8ee9f",
-    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.73.3/chezmoi_2.73.3_linux_amd64.tar.gz"],
+    sha256 = "1b98a567f726f41540414aea4caf912699d53e248b29ccf8369cf553657b2374",
+    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_linux_amd64.tar.gz"],
 )
 
 http_archive(
     name = "chezmoi_linux_arm64",
     build_file_content = _CHEZMOI_BUILD,
-    sha256 = "c9e6a6e71eb5291018e161a8426d7c313cd2e8553c2ca4029511fec2a33bc28c",
-    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.73.3/chezmoi_2.73.3_linux_arm64.tar.gz"],
+    sha256 = "bf89495d1aab5e4fa0fc1ba9457837b34ee8dec9b787570f2de3e1c12a5835a5",
+    urls = ["https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_linux_arm64.tar.gz"],
 )
