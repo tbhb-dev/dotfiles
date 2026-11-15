@@ -165,7 +165,7 @@ bazel_env(
         "buildifier": "@buildifier_prebuilt//:buildifier",
         "cog": "@tbhb_rules_cog//:cog",
         "editorconfig-checker": "@tbhb_rules_editorconfig_checker//:editorconfig-checker",
-        "gitleaks": "@tbhb_rules_gitleaks//:gitleaks",
+        "gitleaks": "@tbhb_rules//lint:gitleaks",
         "rumdl": "@tbhb_rules_rumdl//:rumdl",
         "ryl": "@tbhb_rules_ryl//:ryl",
         "shellcheck": "@tbhb_rules_shellcheck//:shellcheck",
