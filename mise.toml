@@ -2,7 +2,7 @@
 # Copyright Tony Burns
 
 [tools]
-prek = "0.5.10"
+prek = "0.5.11"
 
 [settings]
 locked = true
