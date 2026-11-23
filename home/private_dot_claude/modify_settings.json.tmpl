@@ -29,9 +29,6 @@ BASE = json.loads({{ includeTemplate "claude-settings-base.json" . | quote }})
 REMOVE_ALLOW = json.loads({{ dig "removeAllowEntries" (list) . | toJson | quote }})
 if not isinstance(REMOVE_ALLOW, list) or not all(isinstance(e, str) for e in REMOVE_ALLOW):
     sys.exit("modify_settings: removeAllowEntries is not a list of strings")
-{{- if ne .chezmoi.os "darwin" }}
-BASE.pop("statusLine", None)  # macOS-only command path
-{{- end }}
 OWNED = ("guard-exit-echo.pl", "rewrite-bsd-sed-i.pl", "rewrite-zsh-equals.pl")
 
 
