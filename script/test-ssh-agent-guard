@@ -132,6 +132,8 @@ for sh in /bin/sh /bin/bash /bin/zsh; do
 	agent=(SHELL="${sh}" TBHB_OP_AGENT=1 CLAUDECODE=1)
 	guard_for refused "${sh} user@host" "${g}" "${agent[@]}" -- "${me}@testprefix-qq04"
 	guard_for refused "${sh} -l" "${g}" "${agent[@]}" -- -l "${me}" testprefix-qq04
+	guard_for refused "${sh} -l with a style suffix" "${g}" "${agent[@]}" -- -l "${me}:x" testprefix-qq04
+	guard_for refused "${sh} user with an empty style" "${g}" "${agent[@]}" -- "${me}:@testprefix-qq04"
 	guard_for refused "${sh} -o User" "${g}" "${agent[@]}" -- -o User="${me}" testprefix-qq04
 	guard_for refused "${sh} bare host, local user" "${g}" "${agent[@]}" -- testprefix-qq04
 	guard_for refused "${sh} short name" "${g}" "${agent[@]}" -- qq04

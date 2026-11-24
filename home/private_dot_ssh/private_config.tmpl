@@ -49,6 +49,7 @@ Host *
 # it for a name that matches. final matches on the last pass, and the block
 # sits at the end of the file, so every Hostname and User line counts. It needs
 # OpenSSH 8.0 or later. SIGKILL, since an inherited ignore can mask SIGTERM.
-Match final host "{{ join "," $sshRefuseHosts }}" user {{ $sshRefuseUser }} exec "case $TBHB_OP_AGENT:$SSH_CONNECTION$CLAUDECODE$CODEX_HOME$CODEX_THREAD_ID in 1:) exit 1;; esac; echo ssh refused: agent sessions may not log in as this user on this host. Use the ops account. >&2; kill -9 $PPID"
+# user:* too, since sshd drops a :style suffix from the user name.
+Match final host "{{ join "," $sshRefuseHosts }}" user "{{ $sshRefuseUser }},{{ $sshRefuseUser }}:*" exec "case $TBHB_OP_AGENT:$SSH_CONNECTION$CLAUDECODE$CODEX_HOME$CODEX_THREAD_ID in 1:) exit 1;; esac; echo ssh refused: agent sessions may not log in as this user on this host. Use the ops account. >&2; kill -9 $PPID"
 
 {{ end -}}
