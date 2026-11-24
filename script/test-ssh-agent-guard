@@ -121,8 +121,11 @@ guard_for() {
 	fi
 }
 g="${out}/guard_config"
-# Host and User lines after the guard still count, through the final pass.
-printf 'Host alias.invalid\n  Hostname testprefix-qq06\nHost testprefix-qq07\n  User %s\n' "${other}" >>"${g}"
+# Host and User lines ahead of the guard count even when they first match on
+# the final pass, once Hostname has changed the name.
+lines="Host alias.invalid\n  Hostname testprefix-qq06\nHost testprefix-qq07\n  User ${other}\nHost alias2.invalid\n  Hostname testprefix-qq08\nHost testprefix-qq08\n  User ${other}\n"
+awk -v lines="${lines}" '/^Match final/ { printf "%s", lines } { print }' "${out}/guard_config" >"${g}.new"
+mv "${g}.new" "${g}"
 human=(TBHB_OP_AGENT=1)
 for sh in /bin/sh /bin/bash /bin/zsh; do
 	[[ -x "${sh}" ]] || continue
@@ -136,6 +139,7 @@ for sh in /bin/sh /bin/bash /bin/zsh; do
 	guard_for refused "${sh} trailing dot" "${g}" "${agent[@]}" -- "${me}@testprefix-qq04."
 	guard_for refused "${sh} later Hostname line" "${g}" "${agent[@]}" -- "${me}@alias.invalid"
 	guard_for allowed "${sh} later User line" "${g}" "${agent[@]}" -- testprefix-qq07
+	guard_for allowed "${sh} User line on the final pass" "${g}" "${agent[@]}" -- alias2.invalid
 	guard_for refused "${sh} upper case" "${g}" "${agent[@]}" -- "${me}@TESTPREFIX-QQ04"
 	guard_for refused "${sh} -o Hostname" "${g}" "${agent[@]}" -- -o Hostname=testprefix-qq05 "${me}@other.invalid"
 	guard_for refused "${sh} -o ProxyCommand=none" "${g}" "${agent[@]}" -- -o ProxyCommand=none qq04
@@ -147,6 +151,9 @@ for sh in /bin/sh /bin/bash /bin/zsh; do
 	guard_for allowed "${sh} terminal profile" "${g}" SHELL="${sh}" "${human[@]}" -- qq04
 done
 guard_for refused "env -i" "${g}" SHELL=/bin/sh -- qq04
+trap '' TERM
+guard_for refused "SIGTERM ignored" "${g}" SHELL=/bin/sh CLAUDECODE=1 -- qq04
+trap - TERM
 guard_for refused "marker with CODEX_HOME" "${g}" "${human[@]}" CODEX_HOME=/x -- qq04
 guard_for refused "marker with CODEX_THREAD_ID" "${g}" "${human[@]}" CODEX_THREAD_ID=x -- qq04
 guard_for refused "marker over ssh" "${g}" "${human[@]}" SSH_CONNECTION="1 2 3 4" -- qq04
