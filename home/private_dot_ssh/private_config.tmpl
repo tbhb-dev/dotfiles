@@ -13,9 +13,11 @@ Include ~/.orbstack/ssh/config
 
 {{ end -}}
 {{ if not $isDevcontainer -}}
-# Same rule as .zprofile: over ssh or inside an agent harness, never use an
-# agent (an inherited SSH_AUTH_SOCK may still be 1Password's); keys on disk only.
-Match exec "case $SSH_CONNECTION$CLAUDECODE$CODEX_HOME in '') exit 1;; esac"
+# Allowlist, same rule as .zprofile: the 1Password agent is used only when the
+# terminal profile set TBHB_OP_AGENT=1 and no ssh or agent-harness variable is
+# present. Everything else (a scrubbed env, a hook, a launchd job) gets keys on
+# disk only, even if an inherited SSH_AUTH_SOCK is 1Password's.
+Match exec "case $TBHB_OP_AGENT:$SSH_CONNECTION$CLAUDECODE$CODEX_HOME in 1:) exit 1;; esac"
   IdentityAgent none
 
 {{ end -}}
