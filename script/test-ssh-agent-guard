@@ -78,6 +78,8 @@ op_sock=/x/1password/agent.sock
 sign_sock_for unset "env -i"
 sign_sock_for unset "inherited 1Password socket" SSH_AUTH_SOCK="${op_sock}"
 sign_sock_for unset "socket with CLAUDECODE" TBHB_OP_AGENT=1 CLAUDECODE=1 SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for unset "marker with CODEX_HOME" TBHB_OP_AGENT=1 CODEX_HOME=/x SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for unset "marker over ssh" TBHB_OP_AGENT=1 SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK="${op_sock}"
 sign_sock_for "${op_sock}" "terminal profile marker" TBHB_OP_AGENT=1 SSH_AUTH_SOCK="${op_sock}"
 sign_sock_for /tmp/fwd/agent "forwarded agent over ssh" SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK=/tmp/fwd/agent
 
