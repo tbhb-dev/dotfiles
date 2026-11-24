@@ -1,0 +1,13 @@
+{{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- if and (eq .chezmoi.os "linux") (not $isDevcontainer) -}}
+# Enabled by run_onchange_after_load-dotfiles-update.sh.
+[Unit]
+Description=Run tbhb-dotfiles-update every hour
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target
+{{- end }}

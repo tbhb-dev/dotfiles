@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# cspell:ignore NOSYSTEM
+# shellcheck disable=SC2016,SC2034 # check() runs its quoted condition later
+# Run tbhb-dotfiles-update against a throwaway origin, clone and home, with
+# the pinned chezmoi and the system git behind logging wrappers. Checks that it
+# only fast-forwards, never forces, never touches ~/.claude/settings.json,
+# keeps a locally changed target, skips an off-main or dirty source, and gives
+# git no agent socket. No network.
+set -euo pipefail
+
+root="${TEST_SRCDIR:+${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}}"
+root="${root:-$(cd "$(dirname "$0")/.." && pwd)}"
+update="${root}/home/private_dot_local/private_bin/executable_tbhb-dotfiles-update"
+out="$(mktemp -d)"
+trap 'rm -rf "${out}"' EXIT
+real_git="$(command -v git)"
+chezmoi_bin="${CHEZMOI_BIN:-$(command -v chezmoi)}"
+[[ "${chezmoi_bin}" == /* ]] || chezmoi_bin="${PWD}/${chezmoi_bin}"
+
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="${out}/gitconfig"
+printf '[user]\n\tname = t\n\temail = t@example.invalid\n[commit]\n\tgpgsign = false\n[init]\n\tdefaultBranch = main\n' >"${GIT_CONFIG_GLOBAL}"
+
+# Wrappers log every call, with the agent socket and ssh command git sees.
+mkdir -p "${out}/bin"
+cat >"${out}/bin/git" <<EOF
+#!/bin/sh
+echo "sock=\${SSH_AUTH_SOCK-unset} ssh=\${GIT_SSH_COMMAND-unset} git \$*" >>"${out}/git.log"
+exec "${real_git}" "\$@"
+EOF
+cat >"${out}/bin/chezmoi" <<EOF
+#!/bin/sh
+echo "chezmoi \$*" >>"${out}/chezmoi.log"
+exec "${chezmoi_bin}" "\$@"
+EOF
+chmod +x "${out}/bin/git" "${out}/bin/chezmoi"
+
+home="${out}/home"
+origin="${out}/origin"
+work="${out}/work"
+clone="${home}/.local/share/chezmoi"
+mkdir -p "${home}/.claude" "${work}/home/private_dot_claude"
+echo home >"${work}/.chezmoiroot"
+echo one >"${work}/home/dot_one"
+printf '#!/bin/sh\necho MODIFIED\n' >"${work}/home/private_dot_claude/modify_settings.json"
+"${real_git}" -C "${work}" init -q
+"${real_git}" -C "${work}" add -A
+"${real_git}" -C "${work}" commit -qm init
+"${real_git}" clone -q --bare "${work}" "${origin}"
+"${real_git}" -C "${work}" remote add origin "${origin}"
+"${real_git}" clone -q "${origin}" "${clone}"
+echo live >"${home}/.claude/settings.json"
+
+# push_origin <file under home/> <content>
+push_origin() {
+	echo "$2" >"${work}/home/$1"
+	"${real_git}" -C "${work}" add -A
+	"${real_git}" -C "${work}" commit -qm "$1"
+	"${real_git}" -C "${work}" push -q origin main
+}
+
+fail=0
+check() {
+	if ! eval "$2"; then
+		echo "FAIL $1"
+		fail=1
+	fi
+}
+run() {
+	: >"${out}/git.log"
+	: >"${out}/chezmoi.log"
+	rc=0
+	env -i HOME="${home}" PATH="${out}/bin:/usr/bin:/bin" \
+		GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL}" \
+		SSH_AUTH_SOCK=/x/1password/agent.sock "$@" \
+		/bin/bash "${update}" >"${out}/run.log" 2>&1 || rc=$?
+}
+head_of() { "${real_git}" -C "$1" rev-parse "${2:-HEAD}"; }
+
+# 1. A new commit on origin: fast-forward and apply, settings.json untouched.
+push_origin dot_two two
+run
+check "update exits 0" '[[ ${rc} -eq 0 ]]'
+check "clone fast-forwarded to origin" '[[ $(head_of "${clone}") == $(head_of "${origin}" main) ]]'
+check "new file applied" '[[ $(cat "${home}/.two" 2>/dev/null) == two ]]'
+check "settings.json untouched" '[[ $(cat "${home}/.claude/settings.json") == live ]]'
+check "settings.json never a chezmoi target" '! grep -q "settings.json" "${out}/chezmoi.log"'
+check "chezmoi never forced" '! grep -q -- "--force" "${out}/chezmoi.log"'
+check "git only fetches and fast-forwards" '! grep -Eq "git .*( pull| rebase| reset| --force)" "${out}/git.log"'
+check "merge is --ff-only" 'grep -q "git .*merge --ff-only" "${out}/git.log"'
+check "git sees no agent socket" '! grep -v "^sock=unset " "${out}/git.log" | grep -q .'
+check "git ssh ignores agents" 'grep -q "^sock=unset ssh=ssh -o BatchMode=yes -o IdentityAgent=none git .*fetch" "${out}/git.log"'
+
+# 2. A locally changed target stays, the rest still applies, the run fails.
+echo mine >"${home}/.two"
+push_origin dot_two two-upstream
+push_origin dot_three three
+run
+check "conflict exits nonzero" '[[ ${rc} -ne 0 ]]'
+check "locally changed file kept" '[[ $(cat "${home}/.two") == mine ]]'
+check "other files still applied" '[[ $(cat "${home}/.three" 2>/dev/null) == three ]]'
+echo two-upstream >"${home}/.two"
+
+# 3. A diverged clone: no merge commit, no rebase, HEAD unchanged.
+echo local >"${clone}/home/dot_local"
+"${real_git}" -C "${clone}" add -A
+"${real_git}" -C "${clone}" commit -qm local
+before="$(head_of "${clone}")"
+push_origin dot_four four
+run
+check "diverged exits nonzero" '[[ ${rc} -ne 0 ]]'
+check "diverged HEAD unchanged" '[[ $(head_of "${clone}") == "${before}" ]]'
+check "diverged applies nothing" '[[ ! -e "${home}/.four" ]]'
+"${real_git}" -C "${clone}" reset -q --hard origin/main
+
+# 4. Off main, 5. dirty tree: skip before any fetch.
+"${real_git}" -C "${clone}" checkout -qb topic
+run
+check "off main exits nonzero" '[[ ${rc} -ne 0 ]]'
+check "off main does not fetch" '! grep -q "git .*fetch" "${out}/git.log"'
+"${real_git}" -C "${clone}" checkout -q main
+echo dirty >>"${clone}/home/dot_one"
+run
+check "dirty exits nonzero" '[[ ${rc} -ne 0 ]]'
+check "dirty does not fetch" '! grep -q "git .*fetch" "${out}/git.log"'
+"${real_git}" -C "${clone}" checkout -q -- home/dot_one
+
+# 6. Devcontainer: nothing runs.
+run REMOTE_CONTAINERS=1
+check "devcontainer exits 0" '[[ ${rc} -eq 0 ]]'
+check "devcontainer runs no git" '[[ ! -s "${out}/git.log" ]]'
+
+[[ "${fail}" -eq 0 ]] && echo "dotfiles update: all cases pass"
+exit "${fail}"

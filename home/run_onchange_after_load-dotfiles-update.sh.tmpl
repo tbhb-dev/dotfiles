@@ -1,0 +1,25 @@
+{{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- if not $isDevcontainer -}}
+#!/bin/bash
+# Load the hourly tbhb-dotfiles-update job, and reload it when its unit changes.
+set -euo pipefail
+{{- if eq .chezmoi.os "darwin" }}
+# plist hash: {{ include "private_Library/LaunchAgents/dev.tbhb.dotfiles-update.plist.tmpl" | sha256sum }}
+plist="{{ .chezmoi.homeDir }}/Library/LaunchAgents/dev.tbhb.dotfiles-update.plist"
+job="gui/$(id -u)/dev.tbhb.dotfiles-update"
+if launchctl print "${job}" >/dev/null 2>&1; then
+	# Booting out the job from inside it would kill this apply. Fail instead,
+	# so the reload stays pending until an apply outside the job.
+	if [[ "${XPC_SERVICE_NAME:-}" == dev.tbhb.dotfiles-update ]]; then
+		echo "dev.tbhb.dotfiles-update changed; run chezmoi apply outside the job to reload it" >&2
+		exit 1
+	fi
+	launchctl bootout "${job}"
+fi
+launchctl bootstrap "gui/$(id -u)" "${plist}"
+{{- else if eq .chezmoi.os "linux" }}
+# unit hash: {{ include "private_dot_config/systemd/user/tbhb-dotfiles-update.service.tmpl" | sha256sum }} {{ include "private_dot_config/systemd/user/tbhb-dotfiles-update.timer.tmpl" | sha256sum }}
+systemctl --user daemon-reload
+systemctl --user enable --now tbhb-dotfiles-update.timer
+{{- end }}
+{{- end }}

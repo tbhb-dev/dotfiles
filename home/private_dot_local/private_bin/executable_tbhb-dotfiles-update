@@ -1,0 +1,48 @@
+#!/bin/bash
+# Keep this host's chezmoi source on origin/main and apply it. The launchd
+# agent (macOS) or systemd user timer (Linux) runs it every hour.
+#
+# It fast-forwards only: a source tree that is off main, has local changes or
+# has diverged is left alone and the run exits nonzero. It never passes
+# --force. A target changed since chezmoi last wrote it stays as it is
+# (--error-on-conflict), and ~/.claude/settings.json is never a target, since
+# rewriting it under running agent sessions is unsafe. No agent socket and no
+# prompt reach git. Bash 3.2 compatible (macOS /bin/bash).
+set -euo pipefail
+
+unset SSH_AUTH_SOCK
+export GIT_TERMINAL_PROMPT=0
+export GIT_SSH_COMMAND='ssh -o BatchMode=yes -o IdentityAgent=none'
+
+if [[ -n "${REMOTE_CONTAINERS:-}" || -n "${CODESPACES:-}" ]]; then
+	echo "tbhb-dotfiles-update: devcontainer, skipping"
+	exit 0
+fi
+
+tree="$(git -C "$(chezmoi source-path)" rev-parse --show-toplevel)"
+branch="$(git -C "${tree}" symbolic-ref --quiet --short HEAD || true)"
+if [[ "${branch}" != main ]]; then
+	echo "tbhb-dotfiles-update: ${tree} is on '${branch:-detached HEAD}', not main; skipping" >&2
+	exit 1
+fi
+if [[ -n "$(git -C "${tree}" status --porcelain --untracked-files=no)" ]]; then
+	echo "tbhb-dotfiles-update: ${tree} has local changes; skipping" >&2
+	exit 1
+fi
+
+before="$(git -C "${tree}" rev-parse HEAD)"
+git -C "${tree}" fetch --quiet origin main
+git -C "${tree}" merge --ff-only --quiet FETCH_HEAD
+after="$(git -C "${tree}" rev-parse HEAD)"
+echo "tbhb-dotfiles-update: source ${before} -> ${after}"
+
+# Every managed entry except settings.json, named one by one: a directory
+# target would recurse into it.
+skip="${HOME}/.claude/settings.json"
+targets=()
+while IFS= read -r path; do
+	[[ "${path}" == "${skip}" ]] || targets+=("${path}")
+done < <(chezmoi managed --path-style=absolute)
+
+chezmoi apply --no-tty --error-on-conflict --keep-going --recursive=false \
+	"${targets[@]}" </dev/null

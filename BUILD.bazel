@@ -237,6 +237,18 @@ sh_test(
     env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
 )
 
+# Runs tbhb-dotfiles-update against a throwaway origin, clone and home: it
+# only fast-forwards, never forces and never targets ~/.claude/settings.json.
+sh_test(
+    name = "dotfiles_update_test",
+    srcs = ["script/test-dotfiles-update"],
+    data = [
+        ":chezmoi",
+        "//:home_files",
+    ],
+    env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
+)
+
 filegroup(
     name = "home_files",
     srcs = glob(
