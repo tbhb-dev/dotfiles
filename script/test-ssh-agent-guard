@@ -88,6 +88,8 @@ sign_sock_for /tmp/fwd/agent "forwarded agent over ssh" SSH_CONNECTION="1 2 3 4"
 # that user on those hosts. Fake names only. The guarded user is the local one,
 # so a bare host name falls back to it. ssh -G never connects.
 me="$(id -un)"
+other=ops
+[[ "${me}" != "${other}" ]] || other=agent
 guard_data="${data%\}}"',"sshShortHostPrefix":"testprefix-","sshShortHostPatterns":["qq??"],"sshAgentRefuseUser":"'"${me}"'","sshAgentRefuseHosts":["testprefix-qq0*"]}'
 "${CHEZMOI_BIN:-chezmoi}" execute-template \
 	--source "${src}" --config "${out}/chezmoi.toml" --override-data "${guard_data}" \
@@ -119,6 +121,8 @@ guard_for() {
 	fi
 }
 g="${out}/guard_config"
+# Host and User lines after the guard still count, through the final pass.
+printf 'Host alias.invalid\n  Hostname testprefix-qq06\nHost testprefix-qq07\n  User %s\n' "${other}" >>"${g}"
 human=(TBHB_OP_AGENT=1)
 for sh in /bin/sh /bin/bash /bin/zsh; do
 	[[ -x "${sh}" ]] || continue
@@ -129,13 +133,16 @@ for sh in /bin/sh /bin/bash /bin/zsh; do
 	guard_for refused "${sh} bare host, local user" "${g}" "${agent[@]}" -- testprefix-qq04
 	guard_for refused "${sh} short name" "${g}" "${agent[@]}" -- qq04
 	guard_for refused "${sh} full name with a domain" "${g}" "${agent[@]}" -- "${me}@testprefix-qq04.example.invalid"
+	guard_for refused "${sh} trailing dot" "${g}" "${agent[@]}" -- "${me}@testprefix-qq04."
+	guard_for refused "${sh} later Hostname line" "${g}" "${agent[@]}" -- "${me}@alias.invalid"
+	guard_for allowed "${sh} later User line" "${g}" "${agent[@]}" -- testprefix-qq07
 	guard_for refused "${sh} upper case" "${g}" "${agent[@]}" -- "${me}@TESTPREFIX-QQ04"
 	guard_for refused "${sh} -o Hostname" "${g}" "${agent[@]}" -- -o Hostname=testprefix-qq05 "${me}@other.invalid"
 	guard_for refused "${sh} -o ProxyCommand=none" "${g}" "${agent[@]}" -- -o ProxyCommand=none qq04
 	guard_for refused "${sh} -J" "${g}" "${agent[@]}" -- -J hop.invalid qq04
 	guard_for refused "${sh} -i with IdentitiesOnly=no" "${g}" "${agent[@]}" -- -i /dev/null -o IdentitiesOnly=no -A qq04
-	guard_for allowed "${sh} other user" "${g}" "${agent[@]}" -- ops@qq04
-	guard_for allowed "${sh} other user, full name" "${g}" "${agent[@]}" -- -l ops testprefix-qq04
+	guard_for allowed "${sh} other user" "${g}" "${agent[@]}" -- "${other}@qq04"
+	guard_for allowed "${sh} other user, full name" "${g}" "${agent[@]}" -- -l "${other}" testprefix-qq04
 	guard_for allowed "${sh} unguarded host" "${g}" "${agent[@]}" -- "${me}@other.invalid"
 	guard_for allowed "${sh} terminal profile" "${g}" SHELL="${sh}" "${human[@]}" -- qq04
 done

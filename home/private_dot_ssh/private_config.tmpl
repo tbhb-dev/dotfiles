@@ -35,8 +35,9 @@ Host {{ join " " $sshShortPatterns }}
 # profile (the allowlist above, plus Codex's per-thread variable), ssh stops
 # itself while it reads this file. Killing the parent ssh from Match exec runs
 # before any option takes effect, so -o, -i, -J and agent forwarding cannot skip
-# it. Placed after the short-name block so host sees the expanded name.
-Match host "{{ join "," $sshRefuseHosts }}" user {{ $sshRefuseUser }} exec "case $TBHB_OP_AGENT:$SSH_CONNECTION$CLAUDECODE$CODEX_HOME$CODEX_THREAD_ID in 1:) exit 1;; esac; echo ssh refused: agent sessions may not log in as this user on this host. Use the ops account. >&2; kill $PPID"
+# it for a name that matches. final matches on the last pass, after every
+# Hostname and User line. It needs OpenSSH 8.0 or later.
+Match final host "{{ join "," $sshRefuseHosts }}" user {{ $sshRefuseUser }} exec "case $TBHB_OP_AGENT:$SSH_CONNECTION$CLAUDECODE$CODEX_HOME$CODEX_THREAD_ID in 1:) exit 1;; esac; echo ssh refused: agent sessions may not log in as this user on this host. Use the ops account. >&2; kill $PPID"
 
 {{ end -}}
 {{ if and $isDarwin (not $isDevcontainer) -}}
