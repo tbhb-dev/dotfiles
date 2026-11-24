@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cspell:ignore NOSYSTEM askpass sshaskpass onchange plutil lbin bootout
+# cspell:ignore NOSYSTEM askpass sshaskpass onchange plutil lbin bootout sshpass zthree
 # shellcheck disable=SC2016,SC2034 # check() runs its quoted condition later
 # Run the rendered tbhb-dotfiles-update against a throwaway origin, clone and
 # home, with the pinned chezmoi and the system git behind logging wrappers.
@@ -41,12 +41,12 @@ mkdir -p "${out}/bin"
 cat >"${out}/bin/git" <<EOF
 #!/bin/sh
 case " \$* " in *" status "*) [ -n "\${FAIL_STATUS-}" ] && exit 128 ;; esac
-echo "sock=\${SSH_AUTH_SOCK-unset} prompt=\${GIT_TERMINAL_PROMPT-unset} askpass=\${GIT_ASKPASS-unset} sshaskpass=\${SSH_ASKPASS_REQUIRE-unset} ssh=\${GIT_SSH_COMMAND-unset} git \$*" >>"${out}/git.log"
+echo "sock=\${SSH_AUTH_SOCK-unset} op=\${TBHB_OP_AGENT-unset} sshpass=\${SSH_ASKPASS-unset} prompt=\${GIT_TERMINAL_PROMPT-unset} askpass=\${GIT_ASKPASS-unset} sshaskpass=\${SSH_ASKPASS_REQUIRE-unset} ssh=\${GIT_SSH_COMMAND-unset} git \$*" >>"${out}/git.log"
 exec "${real_git}" "\$@"
 EOF
 cat >"${out}/bin/chezmoi" <<EOF
 #!/bin/sh
-echo "chezmoi \$*" >>"${out}/chezmoi.log"
+echo "upd=\${TBHB_DOTFILES_UPDATE-unset} chezmoi \$*" >>"${out}/chezmoi.log"
 if [ "\$1" = managed ]; then
 	# A partial list, then a failure; or an empty list with success.
 	[ -n "\${FAIL_MANAGED-}" ] && echo "\${HOME}/.six" && exit 71
@@ -64,6 +64,7 @@ mkdir -p "${home}" "${work}/home/private_dot_claude"
 echo home >"${work}/.chezmoiroot"
 echo one >"${work}/home/dot_one"
 printf '#!/bin/sh\necho MODIFIED\n' >"${work}/home/private_dot_claude/modify_settings.json"
+printf '#!/bin/sh\necho v1 >>"${HOME}/ran"\n' >"${work}/home/run_onchange_after_x.sh"
 "${real_git}" -C "${work}" init -q
 "${real_git}" -C "${work}" add -A
 "${real_git}" -C "${work}" commit -qm init
@@ -96,7 +97,7 @@ run() {
 	rc=0
 	env -i HOME="${home}" PATH="${out}/bin:/usr/bin:/bin" \
 		GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL}" \
-		SSH_AUTH_SOCK=/x/1password/agent.sock TBHB_OP_AGENT=1 GIT_TERMINAL_PROMPT=1 "$@" \
+		SSH_AUTH_SOCK=/x/1password/agent.sock TBHB_OP_AGENT=1 GIT_TERMINAL_PROMPT=1 SSH_ASKPASS=/x/askpass "$@" \
 		/bin/bash "${update}" >"${out}/run.log" 2>&1 || rc=$?
 }
 head_of() { "${real_git}" -C "$1" rev-parse "${2:-HEAD}"; }
@@ -113,21 +114,30 @@ check "settings.json never a chezmoi target" '! grep -q "settings.json" "${out}/
 check "chezmoi never forced" '! grep -q -- "--force" "${out}/chezmoi.log"'
 check "git only fetches and fast-forwards" '! grep -Eq "git .*( pull| rebase| reset| --force)" "${out}/git.log"'
 check "merge is --ff-only" 'grep -q "git .*merge --ff-only" "${out}/git.log"'
-want_env="sock=unset prompt=0 askpass=/bin/false sshaskpass=never ssh=ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none git "
+want_env="sock=unset op=unset sshpass=/bin/false prompt=0 askpass=/bin/false sshaskpass=never ssh=ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none git "
 check "git sees no agent, prompt or askpass" '! grep -vF "${want_env}" "${out}/git.log" | grep -q .'
+check "apply tells the loader it runs unattended" 'grep -q "^upd=1 chezmoi apply" "${out}/chezmoi.log"'
 check "fetch drops credential helpers" 'grep -q "git .*-c credential.helper= fetch" "${out}/git.log"'
 
-# 2. A locally changed target stays, the rest still applies, the run fails.
+# 2. A run_onchange script that ran at the manual apply runs again when it
+# changes.
+printf '#!/bin/sh\necho v2 >>"${HOME}/ran"\n' >"${work}/home/run_onchange_after_x.sh"
+push_origin dot_two two
+run
+check "changed run_onchange exits 0" '[[ ${rc} -eq 0 ]]'
+check "changed run_onchange ran" '[[ $(tail -n 1 "${home}/ran") == v2 ]]'
+
+# 3. A locally changed target stays, the rest still applies, the run fails.
 echo mine >"${home}/.two"
 push_origin dot_two two-upstream
-push_origin dot_three three
+push_origin dot_zthree three
 run
 check "conflict exits nonzero" '[[ ${rc} -ne 0 ]]'
 check "locally changed file kept" '[[ $(cat "${home}/.two") == mine ]]'
-check "other files still applied" '[[ $(cat "${home}/.three" 2>/dev/null) == three ]]'
+check "files after the conflict still applied" '[[ $(cat "${home}/.zthree" 2>/dev/null) == three ]]'
 echo two-upstream >"${home}/.two"
 
-# 3. A file present before chezmoi first writes it stays.
+# 4. A file present before chezmoi first writes it stays.
 echo before >"${home}/.five"
 push_origin dot_five five
 run
@@ -137,13 +147,13 @@ rm "${home}/.five"
 run
 check "pre-existing cleared exits 0" '[[ ${rc} -eq 0 ]]'
 
-# 4. authorized_keys is never a target.
+# 5. authorized_keys is never a target.
 push_origin private_dot_ssh/authorized_keys key
 run
 check "authorized_keys run exits 0" '[[ ${rc} -eq 0 ]]'
 check "authorized_keys not written" '[[ ! -e "${home}/.ssh/authorized_keys" ]]'
 
-# 5. A diverged clone: no merge commit, no rebase, HEAD unchanged.
+# 6. A diverged clone: no merge commit, no rebase, HEAD unchanged.
 echo local >"${clone}/home/dot_local"
 "${real_git}" -C "${clone}" add -A
 "${real_git}" -C "${clone}" commit -qm local
@@ -155,7 +165,7 @@ check "diverged HEAD unchanged" '[[ $(head_of "${clone}") == "${before}" ]]'
 check "diverged applies nothing" '[[ ! -e "${home}/.four" ]]'
 reset_clone
 
-# 6. A local main ahead of origin: nothing applied.
+# 7. A local main ahead of origin: nothing applied.
 echo ahead >"${clone}/home/dot_ahead"
 "${real_git}" -C "${clone}" add -A
 "${real_git}" -C "${clone}" commit -qm ahead
@@ -164,7 +174,7 @@ check "ahead exits nonzero" '[[ ${rc} -ne 0 ]]'
 check "ahead applies nothing" '[[ ! -e "${home}/.ahead" ]]'
 reset_clone
 
-# 7. Off main, a tracked change, an untracked file, a failing git status:
+# 8. Off main, a tracked change, an untracked file, a failing git status:
 # skip before any fetch.
 skips_fetch() {
 	check "$1 exits nonzero" '[[ ${rc} -ne 0 ]]'
@@ -179,14 +189,15 @@ run
 skips_fetch "tracked change"
 "${real_git}" -C "${clone}" checkout -q -- home/dot_one
 echo new >"${clone}/home/dot_untracked"
+"${real_git}" -C "${clone}" config status.showUntrackedFiles no
 run
-skips_fetch "untracked file"
+skips_fetch "untracked file with status.showUntrackedFiles=no"
 check "untracked file not applied" '[[ ! -e "${home}/.untracked" ]]'
 rm "${clone}/home/dot_untracked"
 run FAIL_STATUS=1
 skips_fetch "failing git status"
 
-# 8. A failing or empty chezmoi managed applies nothing.
+# 9. A failing or empty chezmoi managed applies nothing.
 echo live >"${home}/.claude/settings.json"
 push_origin dot_six six
 run FAIL_MANAGED=1
@@ -198,7 +209,7 @@ check "empty managed exits nonzero" '[[ ${rc} -ne 0 ]]'
 check "empty managed runs no apply" '! grep -q "chezmoi apply" "${out}/chezmoi.log"'
 check "empty managed leaves settings.json" '[[ $(cat "${home}/.claude/settings.json") == live ]]'
 
-# 9. Devcontainers get no updater, no units and no loader.
+# 10. Devcontainers get no updater, no units and no loader.
 for tmpl in private_dot_local/private_bin/executable_tbhb-dotfiles-update.tmpl \
 	private_dot_config/systemd/user/tbhb-dotfiles-update.service.tmpl \
 	private_dot_config/systemd/user/tbhb-dotfiles-update.timer.tmpl \
@@ -208,7 +219,7 @@ for tmpl in private_dot_local/private_bin/executable_tbhb-dotfiles-update.tmpl \
 	done
 done
 
-# 10. The launchd loader, with stub launchctl, plutil and sleep. LOADED says
+# 11. The launchd loader, with stub launchctl, plutil and sleep. LOADED says
 # whether the job is loaded, BOOTSTRAP_FAILS how many bootstraps fail first,
 # LINT_FAIL makes plutil reject the plist.
 loader="${out}/load-darwin"
@@ -246,7 +257,7 @@ check "loader keeps the job on a bad plist (${calls})" '[[ ${rc} -ne 0 && -z ${c
 load LOADED=1 TBHB_DOTFILES_UPDATE=1
 check "loader inside the job never boots out (${calls})" '[[ ${rc} -ne 0 && ${calls} == print ]]'
 
-# 11. The systemd service quotes its paths for a home with a space, and has a
+# 12. The systemd service quotes its paths for a home with a space, and has a
 # start timeout.
 service="$(render linux private_dot_config/systemd/user/tbhb-dotfiles-update.service.tmpl)"
 check "service quotes PATH" 'grep -qx "Environment=\"PATH=/home/linuxbrew/.linuxbrew/bin:/home/r dir/.local/bin:/usr/local/bin:/usr/bin:/bin\"" <<<"${service}"'

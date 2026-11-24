@@ -27,7 +27,7 @@ skip() {
 tree="$(git -C "$(chezmoi source-path)" rev-parse --show-toplevel)"
 branch="$(git -C "${tree}" symbolic-ref --quiet --short HEAD || true)"
 [[ "${branch}" == main ]] || skip "${tree} is on '${branch:-detached HEAD}', not main"
-status="$(git -C "${tree}" status --porcelain)" || skip "git status failed in ${tree}"
+status="$(git -C "${tree}" status --porcelain --untracked-files=all)" || skip "git status failed in ${tree}"
 [[ -z "${status}" ]] || skip "${tree} has local or untracked changes"
 
 before="$(git -C "${tree}" rev-parse HEAD)"
@@ -51,6 +51,12 @@ while IFS= read -r path; do
 done <<<"${managed}"
 [[ "${#targets[@]}" -gt 0 ]] || skip "chezmoi managed listed no targets"
 
-chezmoi apply --no-tty --less-interactive --error-on-conflict --keep-going --recursive=false \
-	"${targets[@]}" </dev/null
+# Files first, keeping any target that changed or predates chezmoi. Then
+# scripts, which --less-interactive would reject once they have run before.
+# The repo has no run_before_ scripts, so running scripts last is safe.
+apply=(chezmoi apply --no-tty --error-on-conflict --keep-going --recursive=false)
+rc=0
+"${apply[@]}" --less-interactive --exclude=scripts "${targets[@]}" </dev/null || rc=1
+"${apply[@]}" --include=scripts "${targets[@]}" </dev/null || rc=1
+exit "${rc}"
 {{- end }}
