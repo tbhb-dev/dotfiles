@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# cspell:ignore NOSYSTEM sshpass sshreq askpass onchange plutil
+# shellcheck disable=SC2016,SC2034,SC2329 # check() runs its quoted condition later
+# Run the rendered tbhb-dotfiles-drift against a throwaway origin, clone and
+# home, with the pinned chezmoi and the system git behind wrappers that log
+# each call and refuse any verb that would change the source or the home
+# directory. Checks the report line and exit code for each kind of drift, the
+# credential scrub, the fail-closed source lookup, and the rendered units and
+# plist. No network.
+set -euo pipefail
+
+root="${TEST_SRCDIR:+${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}}"
+root="${root:-$(cd "$(dirname "$0")/.." && pwd)}"
+src="${root}/home"
+out="$(mktemp -d)"
+trap 'rm -rf "${out}"' EXIT
+real_git="$(command -v git)"
+chezmoi_bin="${CHEZMOI_BIN:-$(command -v chezmoi)}"
+[[ "${chezmoi_bin}" == /* ]] || chezmoi_bin="${PWD}/${chezmoi_bin}"
+: >"${out}/chezmoi.toml"
+
+# render <os> <home dir> <template under home/> [VAR=value ...]
+render() {
+	local os="$1" dir="$2" tmpl="$3"
+	shift 3
+	env "$@" "${chezmoi_bin}" execute-template --source "${src}" --config "${out}/chezmoi.toml" \
+		--override-data "{\"chezmoi\":{\"os\":\"${os}\",\"homeDir\":\"${dir}\"}}" <"${src}/${tmpl}"
+}
+drift="${out}/tbhb-dotfiles-drift"
+render linux /home/r private_dot_local/private_bin/executable_tbhb-dotfiles-drift.tmpl >"${drift}"
+
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="${out}/gitconfig"
+printf '[user]\n\tname = t\n\temail = t@example.invalid\n[commit]\n\tgpgsign = false\n[init]\n\tdefaultBranch = main\n[credential]\n\thelper = store\n' >"${GIT_CONFIG_GLOBAL}"
+
+# The wrappers log each call with the environment it sees, and record any
+# forbidden verb in forbidden.log. FAIL_SOURCE_PATH=empty|exit breaks
+# chezmoi source-path; FAIL_FETCH breaks git fetch.
+mkdir -p "${out}/bin"
+cat >"${out}/bin/git" <<EOF
+#!/bin/sh
+for a in "\$@"; do
+	case "\${a}" in
+	merge | pull | rebase | reset | checkout | switch | commit | push | stash | restore | apply | am | cherry-pick)
+		echo "git \$*" >>"${out}/forbidden.log"
+		exit 99
+		;;
+	fetch) [ -n "\${FAIL_FETCH-}" ] && exit 128 ;;
+	esac
+done
+echo "sock=\${SSH_AUTH_SOCK-unset} op=\${TBHB_OP_AGENT-unset} prompt=\${GIT_TERMINAL_PROMPT-unset} askpass=\${GIT_ASKPASS-unset} sshpass=\${SSH_ASKPASS-unset} sshreq=\${SSH_ASKPASS_REQUIRE-unset} cred=\${GIT_CONFIG_COUNT-unset}:\${GIT_CONFIG_KEY_0-unset}=\${GIT_CONFIG_VALUE_0-unset} ssh=\${GIT_SSH_COMMAND-unset} git \$*" >>"${out}/git.log"
+exec "${real_git}" "\$@"
+EOF
+cat >"${out}/bin/chezmoi" <<EOF
+#!/bin/sh
+case "\$1" in
+source-path)
+	[ "\${FAIL_SOURCE_PATH-}" = empty ] && exit 0
+	[ "\${FAIL_SOURCE_PATH-}" = exit ] && exit 1
+	;;
+status) ;;
+*)
+	echo "chezmoi \$*" >>"${out}/forbidden.log"
+	exit 99
+	;;
+esac
+echo "chezmoi \$*" >>"${out}/chezmoi.log"
+exec "${chezmoi_bin}" "\$@"
+EOF
+chmod +x "${out}/bin/git" "${out}/bin/chezmoi"
+
+home="${out}/home"
+origin="${out}/origin"
+work="${out}/work"
+clone="${home}/.local/share/chezmoi"
+mkdir -p "${home}" "${work}/home"
+echo home >"${work}/.chezmoiroot"
+echo one >"${work}/home/dot_one"
+printf '#!/bin/sh\necho v1 >>"${HOME}/ran"\n' >"${work}/home/run_onchange_after_x.sh"
+"${real_git}" -C "${work}" init -q
+"${real_git}" -C "${work}" add -A
+"${real_git}" -C "${work}" commit -qm init
+"${real_git}" clone -q --bare "${work}" "${origin}"
+"${real_git}" -C "${work}" remote add origin "${origin}"
+"${real_git}" clone -q "${origin}" "${clone}"
+# The host had one manual apply before the job.
+HOME="${home}" "${chezmoi_bin}" apply --no-tty
+
+# push_origin <file under home/> <content>
+push_origin() {
+	echo "$2" >"${work}/home/$1"
+	"${real_git}" -C "${work}" add -A
+	"${real_git}" -C "${work}" commit -qm "$1"
+	"${real_git}" -C "${work}" push -q origin main
+}
+
+fail=0
+check() {
+	if ! eval "$2"; then
+		echo "FAIL $1"
+		fail=1
+	fi
+}
+run() {
+	: >"${out}/git.log"
+	: >"${out}/chezmoi.log"
+	rc=0
+	line="$(env -i HOME="${home}" PATH="${out}/bin:/usr/bin:/bin" \
+		GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL}" \
+		SSH_AUTH_SOCK=/x/1password/agent.sock TBHB_OP_AGENT=1 GIT_TERMINAL_PROMPT=1 \
+		GIT_ASKPASS=/x/askpass SSH_ASKPASS=/x/askpass "$@" \
+		/bin/bash "${drift}" 2>"${out}/err")" || rc=$?
+}
+sha() { "${real_git}" -C "$1" rev-parse "${2:-HEAD}"; }
+field() { tr ' ' '\n' <<<"${line}" | sed -n "s/^$1=//p"; }
+
+# 1. In sync: drift=0, exit 0, both shas equal.
+run
+check "in sync exits 0 (${line})" '[[ ${rc} -eq 0 ]]'
+check "in sync line" '[[ ${line} == "drift=0 behind=0 dirty=0 branch=main status_lines=0 src_sha=$(sha "${clone}") origin_sha=$(sha "${clone}")" ]]'
+want_env="sock=unset op=unset prompt=0 askpass=/bin/false sshpass=/bin/false sshreq=never cred=1:credential.helper= ssh=ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none git "
+check "git sees no agent, prompt, askpass or helper" '[[ -s "${out}/git.log" ]] && ! grep -vF "${want_env}" "${out}/git.log" | grep -q .'
+check "git fetch runs" 'grep -q "git .*fetch --quiet origin main" "${out}/git.log"'
+check "chezmoi status runs" 'grep -q "^chezmoi status" "${out}/chezmoi.log"'
+
+# 2. Origin ahead, with a changed run_onchange script: behind=1, and the
+# source and home stay as they were.
+before="$(sha "${clone}")"
+printf '#!/bin/sh\necho v2 >>"${HOME}/ran"\n' >"${work}/home/run_onchange_after_x.sh"
+push_origin dot_two two
+run
+check "behind exits 1 (${line})" '[[ ${rc} -eq 1 ]]'
+check "behind counts one commit" '[[ $(field drift) == 1 && $(field behind) == 1 ]]'
+check "behind reports both shas" '[[ $(field src_sha) == "${before}" && $(field origin_sha) == $(sha "${origin}" main) ]]'
+check "behind leaves the source" '[[ $(sha "${clone}") == "${before}" ]]'
+check "behind applies nothing" '[[ ! -e "${home}/.two" ]]'
+check "behind runs no script" '[[ $(cat "${home}/ran") == v1 ]]'
+"${real_git}" -C "${clone}" merge -q --ff-only origin/main
+HOME="${home}" "${chezmoi_bin}" apply --no-tty
+
+# 3. A changed home file: status_lines counts it.
+echo mine >"${home}/.one"
+run
+check "home change exits 1 (${line})" '[[ ${rc} -eq 1 && $(field status_lines) -ge 1 && $(field behind) == 0 ]]'
+echo one >"${home}/.one"
+
+# 4. A dirty source, tracked and untracked.
+echo dirty >>"${clone}/home/dot_one"
+run
+check "tracked change exits 1 (${line})" '[[ ${rc} -eq 1 && $(field dirty) == 1 ]]'
+"${real_git}" -C "${clone}" checkout -q -- home/dot_one
+echo new >"${clone}/home/dot_untracked"
+"${real_git}" -C "${clone}" config status.showUntrackedFiles no
+run
+check "untracked file exits 1 (${line})" '[[ ${rc} -eq 1 && $(field dirty) == 1 ]]'
+rm "${clone}/home/dot_untracked"
+
+# 5. Off main.
+"${real_git}" -C "${clone}" checkout -qb topic
+run
+check "off main exits 1 (${line})" '[[ ${rc} -eq 1 && $(field branch) == topic ]]'
+"${real_git}" -C "${clone}" checkout -q main
+
+# 6. Failures report an error, exit 2, and run no git before the source lookup.
+run FAIL_SOURCE_PATH=empty
+check "empty source-path fails closed (${line})" '[[ ${rc} -eq 2 && ${line} == "drift=1 error=source_path" && ! -s "${out}/git.log" ]]'
+run FAIL_SOURCE_PATH=exit
+check "failing source-path fails closed (${line})" '[[ ${rc} -eq 2 && ${line} == "drift=1 error=source_path" && ! -s "${out}/git.log" ]]'
+run FAIL_FETCH=1
+check "failing fetch exits 2 (${line})" '[[ ${rc} -eq 2 && ${line} == "drift=1 error=fetch" ]]'
+
+# 7. Devcontainers: the script exits 0 at once, and every file renders empty.
+run REMOTE_CONTAINERS=1
+check "devcontainer exits 0 with no git" '[[ ${rc} -eq 0 && -z ${line} && ! -s "${out}/git.log" ]]'
+for tmpl in private_dot_local/private_bin/executable_tbhb-dotfiles-drift.tmpl \
+	private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl \
+	private_dot_config/systemd/user/tbhb-dotfiles-drift.timer.tmpl \
+	private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl \
+	run_onchange_after_load-dotfiles-drift.sh.tmpl; do
+	for var in REMOTE_CONTAINERS=1 CODESPACES=1; do
+		for os in linux darwin; do
+			check "${tmpl} empty on ${os} with ${var}" '[[ -z "$(render "${os}" /home/r "${tmpl}" "${var}")" ]]'
+		done
+	done
+done
+
+# 8. Nothing ever called a forbidden verb.
+check "no merge, checkout, apply or other write" '[[ ! -s "${out}/forbidden.log" ]]'
+
+# 9. The plist escapes the home path, and the service quotes it.
+plist="$(render darwin '/home/r & <d>' private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl)"
+check "plist escapes the home path" 'grep -qF "<string>/home/r &amp; &lt;d&gt;/.local/bin/tbhb-dotfiles-drift</string>" <<<"${plist}"'
+if command -v plutil >/dev/null; then
+	check "plist lints" 'plutil -lint -s - <<<"${plist}"'
+fi
+service="$(render linux '/home/r dir' private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl)"
+check "service sets its syslog identifier" 'grep -qx "SyslogIdentifier=tbhb-dotfiles-drift" <<<"${service}"'
+check "service quotes ExecStart" 'grep -qx "ExecStart=\"/home/r dir/.local/bin/tbhb-dotfiles-drift\"" <<<"${service}"'
+
+[[ "${fail}" -eq 0 ]] && echo "dotfiles drift: all cases pass"
+exit "${fail}"

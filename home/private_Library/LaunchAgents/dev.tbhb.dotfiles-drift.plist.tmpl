@@ -1,0 +1,32 @@
+{{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- $brewPrefix := "/opt/homebrew" -}}
+{{- $home := .chezmoi.homeDir | replace "&" "&amp;" | replace "<" "&lt;" | replace ">" "&gt;" -}}
+{{- if not $isDevcontainer -}}
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Runs ~/.local/bin/tbhb-dotfiles-drift every hour. Loaded by
+     run_onchange_after_load-dotfiles-drift.sh. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>dev.tbhb.dotfiles-drift</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>{{ $home }}/.local/bin/tbhb-dotfiles-drift</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>{{ $brewPrefix }}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>StandardOutPath</key>
+	<string>{{ $home }}/Library/Logs/tbhb-dotfiles-drift.log</string>
+	<key>StandardErrorPath</key>
+	<string>{{ $home }}/Library/Logs/tbhb-dotfiles-drift.log</string>
+</dict>
+</plist>
+{{- end }}

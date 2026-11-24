@@ -1,0 +1,16 @@
+{{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- if not $isDevcontainer -}}
+#!/bin/bash
+# Load the hourly tbhb-dotfiles-drift job, and reload it when its unit changes.
+set -euo pipefail
+{{- if eq .chezmoi.os "darwin" }}
+# plist hash: {{ include "private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl" | sha256sum }}
+domain="gui/$(id -u)"
+launchctl bootout "${domain}/dev.tbhb.dotfiles-drift" 2>/dev/null || true
+launchctl bootstrap "${domain}" "{{ .chezmoi.homeDir }}/Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist"
+{{- else if eq .chezmoi.os "linux" }}
+# unit hash: {{ include "private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl" | sha256sum }} {{ include "private_dot_config/systemd/user/tbhb-dotfiles-drift.timer.tmpl" | sha256sum }}
+systemctl --user daemon-reload
+systemctl --user enable --now tbhb-dotfiles-drift.timer
+{{- end }}
+{{- end }}

@@ -46,10 +46,10 @@ The `.chezmoiroot` file sets `home/` as the source root. All managed dotfiles go
 | `home/dot_docker/daemon.json` | `~/.docker/daemon.json` | Docker daemon settings |
 | `home/run_onchange_after_install-vscode-extensions.sh.tmpl` | _(run script)_ | Install VS Code extensions |
 | `home/run_once_after_cleanup-vscode-profiles.sh.tmpl` | _(run script)_ | One-time profile cleanup |
-| `home/private_dot_local/private_bin/executable_tbhb-dotfiles-update.tmpl` | `~/.local/bin/tbhb-dotfiles-update` | Hourly fast-forward of the chezmoi source to `origin/main`, then apply (never `--force`, never `~/.claude/settings.json` or `~/.ssh/authorized_keys`; not in devcontainers) |
-| `home/private_Library/LaunchAgents/dev.tbhb.dotfiles-update.plist.tmpl` | `~/Library/LaunchAgents/dev.tbhb.dotfiles-update.plist` | macOS `launchd` agent that runs it every hour |
-| `home/private_dot_config/systemd/user/tbhb-dotfiles-update.{service,timer}.tmpl` | `~/.config/systemd/user/tbhb-dotfiles-update.{service,timer}` | Linux `systemd` user timer that runs it every hour (empty on macOS) |
-| `home/run_onchange_after_load-dotfiles-update.sh.tmpl` | _(run script)_ | Load the `launchd` agent or enable the timer |
+| `home/private_dot_local/private_bin/executable_tbhb-dotfiles-drift.tmpl` | `~/.local/bin/tbhb-dotfiles-drift` | Hourly read-only drift report: fetches `origin main`, runs `chezmoi status`, prints one `drift=0\|1 ...` line, exits 1 on drift (never merges or applies; empty in devcontainers) |
+| `home/private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl` | `~/Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist` | macOS `launchd` agent that runs it every hour, logging to `~/Library/Logs/tbhb-dotfiles-drift.log` |
+| `home/private_dot_config/systemd/user/tbhb-dotfiles-drift.{service,timer}.tmpl` | `~/.config/systemd/user/tbhb-dotfiles-drift.{service,timer}` | Linux `systemd` user timer that runs it every hour, logging to the journal as `tbhb-dotfiles-drift` (empty on macOS) |
+| `home/run_onchange_after_load-dotfiles-drift.sh.tmpl` | _(run script)_ | Load the `launchd` agent or enable the timer |
 
 ### Zsh file semantics
 
