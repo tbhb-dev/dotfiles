@@ -4,6 +4,9 @@
 {{- /* Opt-in per host: a prefix and short-name patterns from the chezmoi data, so no host names live in this public repo. */ -}}
 {{- $sshShortPrefix := dig "sshShortHostPrefix" "" . -}}
 {{- $sshShortPatterns := dig "sshShortHostPatterns" (list) . -}}
+{{- /* Opt-in per host: the owner's account and the host patterns where agent sessions may not use it. */ -}}
+{{- $sshRefuseUser := dig "sshAgentRefuseUser" "" . -}}
+{{- $sshRefuseHosts := dig "sshAgentRefuseHosts" (list) . -}}
 
 {{ if $isDarwin -}}
 # Added by OrbStack: 'orb' SSH host for Linux machines
@@ -25,6 +28,15 @@ Match exec "case $TBHB_OP_AGENT:$SSH_CONNECTION$CLAUDECODE$CODEX_HOME in 1:) exi
 # Expand a bare short name to its full name, so ssh doesn't wait on a failing lookup of the short one.
 Host {{ join " " $sshShortPatterns }}
   Hostname {{ $sshShortPrefix }}%h
+
+{{ end -}}
+{{ if and $sshRefuseUser $sshRefuseHosts -}}
+# The owner's account on these hosts is for the owner only. Outside a terminal
+# profile (the allowlist above, plus Codex's per-thread variable), ssh stops
+# itself while it reads this file. Killing the parent ssh from Match exec runs
+# before any option takes effect, so -o, -i, -J and agent forwarding cannot skip
+# it. Placed after the short-name block so host sees the expanded name.
+Match host "{{ join "," $sshRefuseHosts }}" user {{ $sshRefuseUser }} exec "case $TBHB_OP_AGENT:$SSH_CONNECTION$CLAUDECODE$CODEX_HOME$CODEX_THREAD_ID in 1:) exit 1;; esac; echo ssh refused: agent sessions may not log in as this user on this host. Use the ops account. >&2; kill $PPID"
 
 {{ end -}}
 {{ if and $isDarwin (not $isDevcontainer) -}}

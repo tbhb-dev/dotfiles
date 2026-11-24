@@ -227,6 +227,8 @@ sh_test(
 
 # Asks ssh, with env -i and with agent markers set, which IdentityAgent the
 # rendered ~/.ssh/config gives. Only the terminal marker may reach 1Password.
+# With fake per-host data, also checks that ssh outside the terminal profile
+# stops itself for the guarded user on the guarded hosts and for no one else.
 sh_test(
     name = "ssh_agent_guard_test",
     srcs = ["script/test-ssh-agent-guard"],
