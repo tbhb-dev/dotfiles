@@ -1,5 +1,7 @@
 {{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
 {{- $brewPrefix := "/home/linuxbrew/.linuxbrew" -}}
+{{- /* Quoted-string escapes, then %% for specifiers; ExecStart also needs $$. */ -}}
+{{- $home := .chezmoi.homeDir | replace "\\" "\\\\" | replace "\"" "\\\"" | replace "%" "%%" -}}
 {{- if and (eq .chezmoi.os "linux") (not $isDevcontainer) -}}
 # Runs ~/.local/bin/tbhb-dotfiles-drift; tbhb-dotfiles-drift.timer starts it.
 # Its one output line goes to the journal, and drift marks the run failed.
@@ -8,8 +10,8 @@ Description=Report drift of the chezmoi source and home from origin/main
 
 [Service]
 Type=oneshot
-Environment="PATH={{ $brewPrefix }}/bin:{{ .chezmoi.homeDir }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart="{{ .chezmoi.homeDir }}/.local/bin/tbhb-dotfiles-drift"
+Environment="PATH={{ $brewPrefix }}/bin:{{ $home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart="{{ $home | replace "$" "$$" }}/.local/bin/tbhb-dotfiles-drift"
 TimeoutStartSec=10min
 # Log shipping keys journal lines on the syslog identifier.
 SyslogIdentifier=tbhb-dotfiles-drift

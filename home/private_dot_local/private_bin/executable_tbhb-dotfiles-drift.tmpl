@@ -5,9 +5,11 @@
 # launchd agent (macOS) or systemd user timer (Linux) runs it every hour.
 #
 # It only fetches and reads: it never merges, checks out or applies, and never
-# runs a chezmoi run_ script. It prints one line per run,
-#   drift=0|1 behind=N dirty=N branch=B status_lines=N src_sha=S origin_sha=O
+# runs a chezmoi run_ script. Every run prints exactly one line,
+#   drift=0|1 behind=N dirty=N branch=B status_lines=N|skipped src_sha=S origin_sha=O
 # and exits 1 on drift. A failure prints `drift=1 error=<step>` and exits 2.
+# `chezmoi status` runs only when the source is clean, on main and equal to
+# origin/main, so the only modify_ scripts it can run are committed ones.
 # No agent socket, prompt, askpass, credential helper or user ssh config
 # reaches git or ssh. Bash 3.2 compatible (macOS /bin/bash).
 set -euo pipefail
@@ -16,41 +18,75 @@ if [[ -n "${REMOTE_CONTAINERS:-}" || -n "${CODESPACES:-}" ]]; then
 	exit 0
 fi
 
-unset SSH_AUTH_SOCK TBHB_OP_AGENT
+# Backstop for the one-line contract: a step that fails without fail() still
+# prints an error line and exits 2.
+emitted=0
+trap 'rc=$?; if [[ ${emitted} != 1 ]]; then echo "drift=1 error=unexpected"; exit 2; fi; exit "${rc}"' EXIT
+fail() {
+	emitted=1
+	echo "drift=1 error=$1"
+	exit 2
+}
+
+unset SSH_AUTH_SOCK TBHB_OP_AGENT GIT_CONFIG_PARAMETERS
+for var in $(compgen -e); do
+	case "${var}" in
+	GIT_CONFIG_KEY_* | GIT_CONFIG_VALUE_*) unset "${var}" ;;
+	*) ;;
+	esac
+done
 export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=never
 export GIT_SSH_COMMAND='ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none'
 # An empty credential.helper clears every configured helper, for every git call.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
 
-fail() {
-	echo "drift=1 error=$1"
-	exit 2
+# No index refresh writes and no fsmonitor hook: git only reads the source.
+g() {
+	local dir="$1"
+	shift
+	git --no-optional-locks -c core.fsmonitor=false -C "${dir}" "$@"
 }
+# A private ref, so another fetch that rewrites FETCH_HEAD cannot change it.
+ref=refs/tbhb-dotfiles-drift/origin-main
 
 src="$(chezmoi source-path </dev/null)" || fail source_path
 [[ -n "${src}" ]] || fail source_path
-tree="$(git -C "${src}" rev-parse --show-toplevel)" || fail source_tree
-branch="$(git -C "${tree}" symbolic-ref --quiet --short HEAD)" || branch=detached
-dirty="$(git -C "${tree}" status --porcelain --untracked-files=all)" || fail git_status
-git -C "${tree}" fetch --quiet origin main </dev/null || fail fetch
-src_sha="$(git -C "${tree}" rev-parse HEAD)" || fail rev_parse
-origin_sha="$(git -C "${tree}" rev-parse FETCH_HEAD)" || fail rev_parse
-behind="$(git -C "${tree}" rev-list --count HEAD..FETCH_HEAD)" || fail rev_list
-status="$(chezmoi status --no-tty </dev/null)" || fail chezmoi_status
+tree="$(g "${src}" rev-parse --show-toplevel)" || fail source_tree
+# symbolic-ref exits 1 for a detached HEAD and higher for an error.
+if head_ref="$(g "${tree}" symbolic-ref --quiet HEAD)"; then
+	branch="${head_ref#refs/heads/}"
+else
+	rc=$?
+	[[ "${rc}" == 1 ]] || fail symbolic_ref
+	head_ref=
+	branch=detached
+fi
+dirty="$(g "${tree}" status --porcelain --untracked-files=all)" || fail git_status
+g "${tree}" fetch --quiet --no-write-fetch-head origin "+refs/heads/main:${ref}" </dev/null || fail fetch
+src_sha="$(g "${tree}" rev-parse --verify --quiet 'HEAD^{commit}')" || fail rev_parse
+origin_sha="$(g "${tree}" rev-parse --verify --quiet "${ref}^{commit}")" || fail rev_parse
+behind="$(g "${tree}" rev-list --count "HEAD..${ref}")" || fail rev_list
 
 count() {
-	if [[ -z "$1" ]]; then
-		echo 0
-	else
-		grep -c '' <<<"$1"
+	local n=0
+	if [[ -n "$1" ]]; then
+		while IFS= read -r _; do
+			n=$((n + 1))
+		done <<<"$1"
 	fi
+	echo "${n}"
 }
 dirty_lines="$(count "${dirty}")"
-status_lines="$(count "${status}")"
-drift=0
-if [[ "${behind}" != 0 || "${dirty_lines}" != 0 || "${branch}" != main || "${status_lines}" != 0 ]]; then
+if [[ "${dirty_lines}" == 0 && "${head_ref}" == refs/heads/main && "${src_sha}" == "${origin_sha}" ]]; then
+	status="$(chezmoi status --no-tty --exclude=scripts </dev/null)" || fail chezmoi_status
+	status_lines="$(count "${status}")"
+	drift=0
+	[[ "${status_lines}" == 0 ]] || drift=1
+else
+	status_lines=skipped
 	drift=1
 fi
+emitted=1
 echo "drift=${drift} behind=${behind} dirty=${dirty_lines} branch=${branch} status_lines=${status_lines} src_sha=${src_sha} origin_sha=${origin_sha}"
 exit "${drift}"
 {{- end }}
