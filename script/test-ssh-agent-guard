@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cspell:ignore identityagent
+# cspell:ignore identityagent keygen
 # Render ~/.ssh/config under darwin data and ask ssh which IdentityAgent each
 # environment gets. Only a terminal profile's TBHB_OP_AGENT=1, with no ssh or
 # agent-harness variable, may reach the 1Password agent. No network, no agent.
@@ -37,6 +37,29 @@ agent_for none "marker with CLAUDECODE" TBHB_OP_AGENT=1 CLAUDECODE=1
 agent_for none "marker with CODEX_HOME" TBHB_OP_AGENT=1 CODEX_HOME=/x
 agent_for none "marker over ssh" TBHB_OP_AGENT=1 SSH_CONNECTION="1 2 3 4"
 agent_for none "wrong marker value" TBHB_OP_AGENT=0
+
+# git's signing wrapper: ssh-keygen -Y sign reads SSH_AUTH_SOCK only. A stub
+# ssh-keygen on PATH reports the socket the wrapper leaves in place.
+mkdir -p "${out}/bin"
+# shellcheck disable=SC2016 # the stub expands its variable when it runs
+printf '#!/bin/sh\necho "${SSH_AUTH_SOCK-unset}"\n' >"${out}/bin/ssh-keygen"
+chmod +x "${out}/bin/ssh-keygen"
+sign_sock_for() {
+	local want="$1" label="$2" got
+	shift 2
+	got="$(env -i HOME=/home/render PATH="${out}/bin:/usr/bin:/bin" "$@" \
+		/bin/sh "${src}/private_dot_local/private_bin/executable_tbhb-ssh-sign")"
+	if [[ "${got}" != "${want}" ]]; then
+		echo "FAIL signing ${label}: SSH_AUTH_SOCK is ${got}, want ${want}"
+		fail=1
+	fi
+}
+op_sock=/x/1password/agent.sock
+sign_sock_for unset "env -i"
+sign_sock_for unset "inherited 1Password socket" SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for unset "socket with CLAUDECODE" TBHB_OP_AGENT=1 CLAUDECODE=1 SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for "${op_sock}" "terminal profile marker" TBHB_OP_AGENT=1 SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for /tmp/fwd/agent "forwarded agent over ssh" SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK=/tmp/fwd/agent
 
 [[ "${fail}" -eq 0 ]] && echo "ssh agent guard: all cases pass"
 exit "${fail}"

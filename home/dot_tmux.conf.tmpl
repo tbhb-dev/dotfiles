@@ -4,6 +4,12 @@
 set -g default-terminal "tmux-256color"
 set -ag terminal-overrides ",*:RGB"
 
+# A server started from a terminal login shell inherits the 1Password marker and
+# socket. Panes run login shells that set both again for tbhb; anything else
+# started from the server (run-shell, a command passed to new-window) gets neither.
+set-environment -gu TBHB_OP_AGENT
+if-shell 'case "$SSH_AUTH_SOCK" in *1password*) exit 0;; esac; exit 1' 'set-environment -gu SSH_AUTH_SOCK'
+
 set-option -g prefix C-q
 bind-key C-q last-window
 bind-key q send-prefix
