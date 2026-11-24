@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# cspell:ignore identityagent keygen proxyjump
+# Render ~/.ssh/config under darwin data and ask ssh which IdentityAgent each
+# environment gets. Only a terminal profile's TBHB_OP_AGENT=1, with no ssh or
+# agent-harness variable, may reach the 1Password agent. No network, no agent.
+set -euo pipefail
+
+root="${TEST_SRCDIR:+${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}}"
+root="${root:-$(cd "$(dirname "$0")/.." && pwd)}"
+src="${root}/home"
+out="$(mktemp -d)"
+trap 'rm -rf "${out}"' EXIT
+: >"${out}/chezmoi.toml"
+ssh_bin="$(command -v ssh)"
+data="{\"chezmoi\":{\"os\":\"darwin\",\"arch\":\"arm64\",\"homeDir\":\"/home/render\",\"username\":\"render\",\"hostname\":\"render\",\"sourceDir\":\"${src}\",\"kernel\":{\"osrelease\":\"6.0.0\"}}}"
+"${CHEZMOI_BIN:-chezmoi}" execute-template \
+	--source "${src}" --config "${out}/chezmoi.toml" --override-data "${data}" \
+	<"${src}/private_dot_ssh/private_config.tmpl" >"${out}/config"
+
+fail=0
+# agent_for <expected: none|1password> <label> [VAR=value ...]
+agent_for() {
+	local want="$1" label="$2" got
+	shift 2
+	got="$(env -i HOME=/home/render PATH=/usr/bin:/bin "$@" "${ssh_bin}" -T -G -F "${out}/config" "${target:-example.invalid}" |
+		awk '$1 == "identityagent" { print ($2 == "none") ? "none" : "1password" }')"
+	if [[ "${got}" != "${want}" ]]; then
+		echo "FAIL ${label}: IdentityAgent is ${got:-unset}, want ${want}"
+		fail=1
+	fi
+}
+
+agent_for none "env -i"
+agent_for none "env -i with an inherited 1Password SSH_AUTH_SOCK" SSH_AUTH_SOCK=/x/1password/agent.sock
+agent_for 1password "terminal profile marker" TBHB_OP_AGENT=1
+agent_for none "marker with CLAUDECODE" TBHB_OP_AGENT=1 CLAUDECODE=1
+agent_for none "marker with CODEX_HOME" TBHB_OP_AGENT=1 CODEX_HOME=/x
+agent_for none "marker over ssh" TBHB_OP_AGENT=1 SSH_CONNECTION="1 2 3 4"
+agent_for none "wrong marker value" TBHB_OP_AGENT=0
+
+# A -J hop starts a child ssh that inherits the environment but not the outer
+# command's -o options, so only the config decides its agent. ssh -G with -J
+# reports the jump setting, and the hop's own lookup uses the same environment.
+jump_agent_for() {
+	local want="$1" label="$2" got
+	shift 2
+	got="$(env -i HOME=/home/render PATH=/usr/bin:/bin "$@" "${ssh_bin}" -T -G -J hop.invalid -F "${out}/config" example.invalid |
+		awk '$1 == "proxyjump" { jump = $2 } $1 == "identityagent" { agent = ($2 == "none") ? "none" : "1password" } END { print jump, agent }')"
+	if [[ "${got}" != "hop.invalid ${want}" ]]; then
+		echo "FAIL ${label}: got '${got}', want 'hop.invalid ${want}'"
+		fail=1
+	fi
+}
+target=hop.invalid agent_for none "hop host lookup under env -i"
+target=hop.invalid agent_for 1password "hop host lookup from the terminal profile" TBHB_OP_AGENT=1
+jump_agent_for none "-J hop under env -i"
+jump_agent_for none "-J hop with an inherited 1Password SSH_AUTH_SOCK" SSH_AUTH_SOCK=/x/1password/agent.sock
+jump_agent_for 1password "-J hop from the terminal profile" TBHB_OP_AGENT=1
+jump_agent_for none "-J hop with CLAUDECODE" TBHB_OP_AGENT=1 CLAUDECODE=1
+
+# git's signing wrapper: ssh-keygen -Y sign reads SSH_AUTH_SOCK only. A stub
+# ssh-keygen on PATH reports the socket the wrapper leaves in place.
+mkdir -p "${out}/bin"
+# shellcheck disable=SC2016 # the stub expands its variable when it runs
+printf '#!/bin/sh\necho "${SSH_AUTH_SOCK-unset}"\n' >"${out}/bin/ssh-keygen"
+chmod +x "${out}/bin/ssh-keygen"
+sign_sock_for() {
+	local want="$1" label="$2" got
+	shift 2
+	got="$(env -i HOME=/home/render PATH="${out}/bin:/usr/bin:/bin" "$@" \
+		/bin/sh "${src}/private_dot_local/private_bin/executable_tbhb-ssh-sign")"
+	if [[ "${got}" != "${want}" ]]; then
+		echo "FAIL signing ${label}: SSH_AUTH_SOCK is ${got}, want ${want}"
+		fail=1
+	fi
+}
+op_sock=/x/1password/agent.sock
+sign_sock_for unset "env -i"
+sign_sock_for unset "inherited 1Password socket" SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for unset "socket with CLAUDECODE" TBHB_OP_AGENT=1 CLAUDECODE=1 SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for unset "marker with CODEX_HOME" TBHB_OP_AGENT=1 CODEX_HOME=/x SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for unset "marker over ssh" TBHB_OP_AGENT=1 SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for "${op_sock}" "terminal profile marker" TBHB_OP_AGENT=1 SSH_AUTH_SOCK="${op_sock}"
+sign_sock_for /tmp/fwd/agent "forwarded agent over ssh" SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK=/tmp/fwd/agent
+
+[[ "${fail}" -eq 0 ]] && echo "ssh agent guard: all cases pass"
+exit "${fail}"

@@ -225,6 +225,18 @@ sh_test(
     env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
 )
 
+# Asks ssh, with env -i and with agent markers set, which IdentityAgent the
+# rendered ~/.ssh/config gives. Only the terminal marker may reach 1Password.
+sh_test(
+    name = "ssh_agent_guard_test",
+    srcs = ["script/test-ssh-agent-guard"],
+    data = [
+        ":chezmoi",
+        "//:home_files",
+    ],
+    env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
+)
+
 filegroup(
     name = "home_files",
     srcs = glob(

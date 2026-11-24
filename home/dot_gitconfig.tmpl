@@ -28,6 +28,8 @@
 {{- if not $isDevcontainer }}
 [gpg]
   format = ssh
+[gpg "ssh"]
+	program = {{ .chezmoi.homeDir }}/.local/bin/tbhb-ssh-sign
 [tag]
 	gpgsign = true
 {{- end }}

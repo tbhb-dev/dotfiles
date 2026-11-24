@@ -1,0 +1,15 @@
+#!/bin/sh
+# git's gpg.ssh.program. ssh-keygen -Y sign reaches an agent through
+# SSH_AUTH_SOCK alone and never reads ~/.ssh/config, so apply the allowlist from
+# .zprofile here: the 1Password agent only for a terminal login shell's marker
+# with no ssh or agent-harness variable. Any other process drops a 1Password
+# socket it inherited, and a forwarded agent stays.
+case "${TBHB_OP_AGENT-}:${SSH_CONNECTION-}${CLAUDECODE-}${CODEX_HOME-}" in
+1:) ;;
+*)
+	case "${SSH_AUTH_SOCK-}" in
+	*1password*) unset SSH_AUTH_SOCK ;;
+	esac
+	;;
+esac
+exec ssh-keygen "$@"
