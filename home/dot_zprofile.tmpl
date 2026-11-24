@@ -43,6 +43,8 @@ if [ -t 0 ] && [ -t 1 ] && [ -z "${SSH_CONNECTION-}" ] && [ -z "${CLAUDECODE-}" 
   export OP_ACCOUNT="my.1password.com"
 {{ end -}}
 else
+  # A headless login shell started from a terminal inherits the marker too.
+  unset TBHB_OP_AGENT
   case "${SSH_AUTH_SOCK-}" in
     *1password*) unset SSH_AUTH_SOCK ;;
   esac

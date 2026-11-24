@@ -9,6 +9,10 @@ set -ag terminal-overrides ",*:RGB"
 # started from the server (run-shell, a command passed to new-window) gets neither.
 set-environment -gu TBHB_OP_AGENT
 if-shell 'case "$SSH_AUTH_SOCK" in *1password*) exit 0;; esac; exit 1' 'set-environment -gu SSH_AUTH_SOCK'
+# A new session and every attach copy the client's SSH_AUTH_SOCK into the session
+# environment, so drop a 1Password socket there too. A forwarded agent stays.
+set-hook -g after-new-session 'run-shell "case \"$(tmux show-environment -t #{session_name} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{session_name} -u SSH_AUTH_SOCK;; esac"'
+set-hook -g client-attached 'run-shell "case \"$(tmux show-environment -t #{session_name} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{session_name} -u SSH_AUTH_SOCK;; esac"'
 
 set-option -g prefix C-q
 bind-key C-q last-window

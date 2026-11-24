@@ -22,7 +22,7 @@ fail=0
 agent_for() {
 	local want="$1" label="$2" got
 	shift 2
-	got="$(env -i HOME=/home/render PATH=/usr/bin:/bin "$@" "${ssh_bin}" -T -G -F "${out}/config" example.invalid |
+	got="$(env -i HOME=/home/render PATH=/usr/bin:/bin "$@" "${ssh_bin}" -T -G -F "${out}/config" "${target:-example.invalid}" |
 		awk '$1 == "identityagent" { print ($2 == "none") ? "none" : "1password" }')"
 	if [[ "${got}" != "${want}" ]]; then
 		echo "FAIL ${label}: IdentityAgent is ${got:-unset}, want ${want}"
@@ -51,6 +51,8 @@ jump_agent_for() {
 		fail=1
 	fi
 }
+target=hop.invalid agent_for none "hop host lookup under env -i"
+target=hop.invalid agent_for 1password "hop host lookup from the terminal profile" TBHB_OP_AGENT=1
 jump_agent_for none "-J hop under env -i"
 jump_agent_for none "-J hop with an inherited 1Password SSH_AUTH_SOCK" SSH_AUTH_SOCK=/x/1password/agent.sock
 jump_agent_for 1password "-J hop from the terminal profile" TBHB_OP_AGENT=1
