@@ -8,11 +8,16 @@ set -ag terminal-overrides ",*:RGB"
 # socket. Panes run login shells that set both again for the operator; anything else
 # started from the server (run-shell, a command passed to new-window) gets neither.
 set-environment -gu TBHB_OP_AGENT
+# A server a harness started carries its CLAUDECODE or CODEX_HOME. Drop them so the
+# operator's panes are not read as agent shells. claude and codex set their own for
+# their children.
+set-environment -gu CLAUDECODE
+set-environment -gu CODEX_HOME
 if-shell 'case "$SSH_AUTH_SOCK" in *1password*) exit 0;; esac; exit 1' 'set-environment -gu SSH_AUTH_SOCK'
 # A new session and every attach copy the client's SSH_AUTH_SOCK into the session
 # environment, so drop a 1Password socket there too. A forwarded agent stays.
-set-hook -g after-new-session 'run-shell "case \"$(tmux show-environment -t #{session_name} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{session_name} -u SSH_AUTH_SOCK;; esac"'
-set-hook -g client-attached 'run-shell "case \"$(tmux show-environment -t #{session_name} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{session_name} -u SSH_AUTH_SOCK;; esac"'
+set-hook -g after-new-session 'run-shell "case \"$(tmux show-environment -t #{session_name} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{session_name} -u SSH_AUTH_SOCK;; esac; tmux set-environment -t #{session_name} -u CLAUDECODE; tmux set-environment -t #{session_name} -u CODEX_HOME"'
+set-hook -g client-attached 'run-shell "case \"$(tmux show-environment -t #{session_name} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{session_name} -u SSH_AUTH_SOCK;; esac; tmux set-environment -t #{session_name} -u CLAUDECODE; tmux set-environment -t #{session_name} -u CODEX_HOME"'
 
 set-option -g prefix C-q
 bind-key C-q last-window
