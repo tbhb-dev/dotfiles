@@ -1,0 +1,56 @@
+{{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- if not $isDevcontainer -}}
+#!/bin/bash
+# Keep this host's chezmoi source on origin/main and apply it. The launchd
+# agent (macOS) or systemd user timer (Linux) runs it every hour.
+#
+# It fast-forwards only: a source tree that is off main, has local or
+# untracked changes, has diverged or is ahead of origin is left alone and the
+# run exits nonzero. It never passes --force. A target changed since chezmoi
+# last wrote it, or present before chezmoi first wrote it, stays as it is.
+# ~/.claude/settings.json and ~/.ssh/authorized_keys* are never targets. No
+# agent socket, prompt, askpass or credential helper reaches git or ssh.
+# Bash 3.2 compatible (macOS /bin/bash).
+set -euo pipefail
+
+unset SSH_AUTH_SOCK TBHB_OP_AGENT
+export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=never
+export GIT_SSH_COMMAND='ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none'
+# The loader run script reads this to tell an unattended apply from a manual one.
+export TBHB_DOTFILES_UPDATE=1
+
+skip() {
+	echo "tbhb-dotfiles-update: $*; skipping" >&2
+	exit 1
+}
+
+tree="$(git -C "$(chezmoi source-path)" rev-parse --show-toplevel)"
+branch="$(git -C "${tree}" symbolic-ref --quiet --short HEAD || true)"
+[[ "${branch}" == main ]] || skip "${tree} is on '${branch:-detached HEAD}', not main"
+status="$(git -C "${tree}" status --porcelain)" || skip "git status failed in ${tree}"
+[[ -z "${status}" ]] || skip "${tree} has local or untracked changes"
+
+before="$(git -C "${tree}" rev-parse HEAD)"
+git -C "${tree}" -c credential.helper= fetch --quiet origin main
+git -C "${tree}" merge --ff-only --quiet FETCH_HEAD
+after="$(git -C "${tree}" rev-parse HEAD)"
+# A local main ahead of origin "fast-forwards" to itself. Its extra commits
+# were never reviewed, so apply nothing.
+[[ "${after}" == "$(git -C "${tree}" rev-parse FETCH_HEAD)" ]] || skip "${tree} has commits not on origin/main"
+echo "tbhb-dotfiles-update: source ${before} -> ${after}"
+
+# Every managed entry except the skipped ones, named one by one: a directory
+# target would recurse, and an empty list would apply everything.
+managed="$(chezmoi managed --path-style=absolute)" || skip "chezmoi managed failed"
+targets=()
+while IFS= read -r path; do
+	case "${path}" in
+	'' | */.claude/settings.json | */.ssh/authorized_keys*) ;;
+	*) targets+=("${path}") ;;
+	esac
+done <<<"${managed}"
+[[ "${#targets[@]}" -gt 0 ]] || skip "chezmoi managed listed no targets"
+
+chezmoi apply --no-tty --less-interactive --error-on-conflict --keep-going --recursive=false \
+	"${targets[@]}" </dev/null
+{{- end }}

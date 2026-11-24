@@ -12,6 +12,7 @@ Description=Fast-forward the chezmoi source to origin/main and apply it
 
 [Service]
 Type=oneshot
-Environment=PATH={{ $brewPrefix }}/bin:{{ .chezmoi.homeDir }}/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart={{ .chezmoi.homeDir }}/.local/bin/tbhb-dotfiles-update
+Environment="PATH={{ $brewPrefix }}/bin:{{ .chezmoi.homeDir }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart="{{ .chezmoi.homeDir }}/.local/bin/tbhb-dotfiles-update"
+TimeoutStartSec=30min
 {{- end }}
