@@ -18,6 +18,7 @@ if-shell 'case "$SSH_AUTH_SOCK" in *1password*) exit 0;; esac; exit 1' 'set-envi
 # environment, so drop a 1Password socket there too. A forwarded agent stays.
 set-hook -g after-new-session 'run-shell "case \"$(tmux show-environment -t #{q:session_id} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{q:session_id} -u SSH_AUTH_SOCK;; esac; tmux set-environment -t #{q:session_id} -u CLAUDECODE; tmux set-environment -t #{q:session_id} -u CODEX_HOME"'
 set-hook -g client-attached 'run-shell "case \"$(tmux show-environment -t #{q:session_id} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{q:session_id} -u SSH_AUTH_SOCK;; esac; tmux set-environment -t #{q:session_id} -u CLAUDECODE; tmux set-environment -t #{q:session_id} -u CODEX_HOME"'
+set-hook -g client-session-changed 'run-shell "case \"$(tmux show-environment -t #{q:session_id} SSH_AUTH_SOCK 2>/dev/null)\" in *1password*) tmux set-environment -t #{q:session_id} -u SSH_AUTH_SOCK;; esac; tmux set-environment -t #{q:session_id} -u CLAUDECODE; tmux set-environment -t #{q:session_id} -u CODEX_HOME"'
 
 set-option -g prefix C-q
 bind-key C-q last-window
