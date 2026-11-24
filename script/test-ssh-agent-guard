@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# cspell:ignore identityagent
 # Render ~/.ssh/config under darwin data and ask ssh which IdentityAgent each
 # environment gets. Only a terminal profile's TBHB_OP_AGENT=1, with no ssh or
 # agent-harness variable, may reach the 1Password agent. No network, no agent.
