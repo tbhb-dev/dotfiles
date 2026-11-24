@@ -34,14 +34,19 @@ before="$(git -C "${tree}" rev-parse HEAD)"
 git -C "${tree}" fetch --quiet origin main
 git -C "${tree}" merge --ff-only --quiet FETCH_HEAD
 after="$(git -C "${tree}" rev-parse HEAD)"
+# A local main ahead of origin "fast-forwards" to itself. Its extra commits
+# were never reviewed, so apply nothing.
+if [[ "${after}" != "$(git -C "${tree}" rev-parse FETCH_HEAD)" ]]; then
+	echo "tbhb-dotfiles-update: ${tree} has commits not on origin/main; skipping" >&2
+	exit 1
+fi
 echo "tbhb-dotfiles-update: source ${before} -> ${after}"
 
 # Every managed entry except settings.json, named one by one: a directory
 # target would recurse into it.
-skip="${HOME}/.claude/settings.json"
 targets=()
 while IFS= read -r path; do
-	[[ "${path}" == "${skip}" ]] || targets+=("${path}")
+	[[ "${path}" == */.claude/settings.json ]] || targets+=("${path}")
 done < <(chezmoi managed --path-style=absolute)
 
 chezmoi apply --no-tty --error-on-conflict --keep-going --recursive=false \

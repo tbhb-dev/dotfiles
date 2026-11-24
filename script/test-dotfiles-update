@@ -112,7 +112,16 @@ check "diverged HEAD unchanged" '[[ $(head_of "${clone}") == "${before}" ]]'
 check "diverged applies nothing" '[[ ! -e "${home}/.four" ]]'
 "${real_git}" -C "${clone}" reset -q --hard origin/main
 
-# 4. Off main, 5. dirty tree: skip before any fetch.
+# 4. A local main ahead of origin: nothing applied.
+echo ahead >"${clone}/home/dot_ahead"
+"${real_git}" -C "${clone}" add -A
+"${real_git}" -C "${clone}" commit -qm ahead
+run
+check "ahead exits nonzero" '[[ ${rc} -ne 0 ]]'
+check "ahead applies nothing" '[[ ! -e "${home}/.ahead" ]]'
+"${real_git}" -C "${clone}" reset -q --hard origin/main
+
+# 5. Off main, 6. dirty tree: skip before any fetch.
 "${real_git}" -C "${clone}" checkout -qb topic
 run
 check "off main exits nonzero" '[[ ${rc} -ne 0 ]]'
@@ -124,7 +133,7 @@ check "dirty exits nonzero" '[[ ${rc} -ne 0 ]]'
 check "dirty does not fetch" '! grep -q "git .*fetch" "${out}/git.log"'
 "${real_git}" -C "${clone}" checkout -q -- home/dot_one
 
-# 6. Devcontainer: nothing runs.
+# 7. Devcontainer: nothing runs.
 run REMOTE_CONTAINERS=1
 check "devcontainer exits 0" '[[ ${rc} -eq 0 ]]'
 check "devcontainer runs no git" '[[ ! -s "${out}/git.log" ]]'

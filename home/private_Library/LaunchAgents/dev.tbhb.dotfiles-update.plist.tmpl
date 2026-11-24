@@ -1,3 +1,9 @@
+{{- $brewPrefix := "" -}}
+{{- if eq .chezmoi.os "darwin" -}}
+{{-   $brewPrefix = "/opt/homebrew" -}}
+{{- else if eq .chezmoi.os "linux" -}}
+{{-   $brewPrefix = "/home/linuxbrew/.linuxbrew" -}}
+{{- end -}}
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Runs ~/.local/bin/tbhb-dotfiles-update every hour. Loaded by
@@ -13,7 +19,7 @@
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>PATH</key>
-		<string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<string>{{ $brewPrefix }}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
 	</dict>
 	<key>StartInterval</key>
 	<integer>3600</integer>
