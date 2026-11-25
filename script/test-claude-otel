@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# The rendered claude() function must export OTEL_RESOURCE_ATTRIBUTES for the
+# claude it runs: "tbhb.account=tony", plus ",session_name=<tmux window name>"
+# with every character outside [A-Za-z0-9_-] replaced by _, only when $TMUX is
+# set and the name is non-empty. It must not leak into the calling shell.
+# Uses a stub claude on PATH and a throwaway tmux server; no network.
+set -euo pipefail
+
+root="${TEST_SRCDIR:+${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}}"
+root="${root:-$(cd "$(dirname "$0")/.." && pwd)}"
+src="${root}/home"
+PATH="${PATH}:/opt/homebrew/bin:/usr/local/bin"
+tmux_bin="$(command -v tmux || true)"
+zsh_bin="$(command -v zsh || true)"
+if [[ -z "${tmux_bin}" || -z "${zsh_bin}" ]]; then
+	echo "SKIP claude otel: needs tmux and zsh on PATH"
+	exit 0
+fi
+# A short directory: a Unix socket path has a length limit.
+out="$(mktemp -d /tmp/otel.XXXXXX)"
+sock="o$$"
+trap 'TMUX_TMPDIR="${out}" "${tmux_bin}" -L "${sock}" kill-server 2>/dev/null || true; rm -rf "${out}"' EXIT
+mkdir -p "${out}/home" "${out}/bin"
+: >"${out}/chezmoi.toml"
+data="{\"chezmoi\":{\"os\":\"linux\",\"arch\":\"arm64\",\"homeDir\":\"${out}/home\",\"username\":\"render\",\"hostname\":\"render\",\"sourceDir\":\"${src}\",\"kernel\":{\"osrelease\":\"6.0.0\"}}}"
+"${CHEZMOI_BIN:-chezmoi}" execute-template \
+	--source "${src}" --config "${out}/chezmoi.toml" --override-data "${data}" \
+	<"${src}/dot_zshrc.tmpl" >"${out}/zshrc"
+awk '/^claude\(\) \{/ {p=1} p {print} p && /^}/ {exit}' "${out}/zshrc" >"${out}/claude.zsh"
+[[ -s "${out}/claude.zsh" ]] || {
+	echo "FAIL: no claude() in the rendered zshrc"
+	exit 1
+}
+
+# The stub prints what claude would see; the probe then prints the shell's own value.
+# shellcheck disable=SC2016 # the stub expands its variable when it runs
+printf '#!/bin/sh\nprintf "child=%%s\\n" "${OTEL_RESOURCE_ATTRIBUTES-unset}"\n' >"${out}/bin/claude"
+chmod +x "${out}/bin/claude"
+cat >"${out}/probe.zsh" <<EOF
+source "${out}/claude.zsh"
+claude >"\$OUT"
+print "parent=\${OTEL_RESOURCE_ATTRIBUTES-unset}" >>"\$OUT"
+EOF
+
+fail=0
+# check <label> <window name or ''> <want child value>; runs inside tmux.
+check() {
+	local label="$1" name="$2" want="$3" got
+	rm -f "${out}/res"
+	env -i HOME="${out}/home" PATH="${out}/bin:${PATH}" TERM=xterm-256color OUT="${out}/res" TMUX_TMPDIR="${out}" \
+		"${tmux_bin}" -L "${sock}" new-session -d -s "s${label}" -n "${name}" "${zsh_bin} -f ${out}/probe.zsh; touch ${out}/done"
+	for _ in $(seq 100); do
+		[[ -e "${out}/done" ]] && break
+		sleep 0.1
+	done
+	rm -f "${out}/done"
+	got="$(<"${out}/res")"
+	if [[ "${got}" == $'child='"${want}"$'\nparent=unset' ]]; then
+		echo "ok ${label}: ${want}"
+	else
+		echo "FAIL ${label}: want child=${want}, parent unset; got ${got//$'\n'/ | }"
+		fail=1
+	fi
+}
+check plain mywin 'tbhb.account=tony,session_name=mywin'
+check dashes 'my-win_1' 'tbhb.account=tony,session_name=my-win_1'
+check messy 'my win,x"y' 'tbhb.account=tony,session_name=my_win_x_y'
+# One _ per character in a UTF-8 locale, one per byte in the C locale: run
+# under C (env -i) so the want is fixed.
+check unicode 'caf'$'\xc3\xa9' 'tbhb.account=tony,session_name=caf__'
+check empty '' 'tbhb.account=tony'
+
+# No tmux: $TMUX unset gives exactly the account key, and nothing leaks.
+got="$(env -i HOME="${out}/home" PATH="${out}/bin:${PATH}" OUT="${out}/res2" "${zsh_bin}" -f -c "OUT=${out}/res2; source ${out}/probe.zsh; cat ${out}/res2")"
+if [[ "${got}" == $'child=tbhb.account=tony\nparent=unset' ]]; then
+	echo "ok no-tmux: tbhb.account=tony"
+else
+	echo "FAIL no-tmux: got ${got//$'\n'/ | }"
+	fail=1
+fi
+exit "${fail}"

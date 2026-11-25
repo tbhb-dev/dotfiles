@@ -92,6 +92,13 @@ safe-codex-workspace() { safe --add-dirs=$PWD/.. -- codex --dangerously-bypass-a
 claude() {
   local root
   root=$(command git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
+  # Tag the session's metrics with the account and, in tmux, the window name
+  # (every character outside [A-Za-z0-9_-] becomes _, so the value is safe in
+  # the attribute list). local -x keeps the variable out of the interactive shell.
+  local name
+  [[ -n $TMUX ]] && name=$(command tmux display-message -p '#W' 2>/dev/null)
+  name=${name//[^A-Za-z0-9_-]/_}
+  local -x OTEL_RESOURCE_ATTRIBUTES="tbhb.account=tony${name:+,session_name=$name}"
   if [[ -f $root/.mcp.json ]] && command grep -q '"awrel"' "$root/.mcp.json" \
     && { (( $# == 0 )) || [[ $1 == -* ]]; } \
     && (( ! ${@[(I)-p]} && ! ${@[(I)--print]} && ! ${@[(I)--dangerously-load-development-channels]} )); then
