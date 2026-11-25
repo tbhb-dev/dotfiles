@@ -1,0 +1,101 @@
+{{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- if not $isDevcontainer -}}
+#!/bin/bash
+# Report whether this host's dotfiles have drifted from origin/main. The
+# launchd agent (macOS) or systemd user timer (Linux) runs it every hour.
+#
+# It only fetches and reads git: it never merges, checks out or applies, and
+# never runs chezmoi beyond `chezmoi source-path`, so no run_ or modify_
+# script runs. It compares the source tree with origin/main only, not the
+# home directory. Every run prints exactly one line,
+#   drift=0|1 behind=N dirty=N branch=B src_sha=S origin_sha=O
+# and exits 1 on drift. A failure prints `drift=1 error=<step>` and exits 2.
+# No agent socket, prompt, askpass, credential helper or user ssh config
+# reaches git or ssh. Bash 3.2 compatible (macOS /bin/bash).
+set -euo pipefail
+
+if [[ -n "${REMOTE_CONTAINERS:-}" || -n "${CODESPACES:-}" ]]; then
+	exit 0
+fi
+
+# Backstop for the one-line contract: a step that fails without fail() still
+# prints an error line and exits 2.
+emitted=0
+trap 'rc=$?; if [[ ${emitted} != 1 ]]; then echo "drift=1 error=unexpected"; exit 2; fi; exit "${rc}"' EXIT
+fail() {
+	emitted=1
+	echo "drift=1 error=$1"
+	exit 2
+}
+
+unset SSH_AUTH_SOCK TBHB_OP_AGENT GIT_CONFIG_PARAMETERS
+for var in $(compgen -e); do
+	case "${var}" in
+	GIT_CONFIG_KEY_* | GIT_CONFIG_VALUE_*) unset "${var}" ;;
+	*) ;;
+	esac
+done
+export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=never
+export GIT_SSH_COMMAND='ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none -o UpdateHostKeys=no'
+# An empty credential.helper clears every configured helper, for every git call.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
+
+# No index refresh writes and no fsmonitor hook: git only reads the source.
+g() {
+	local dir="$1"
+	shift
+	git --no-optional-locks -c core.fsmonitor=false -C "${dir}" "$@"
+}
+# A private ref, so another fetch that rewrites FETCH_HEAD cannot change it.
+ref=refs/tbhb-dotfiles-drift/origin-main
+
+src="$(chezmoi source-path </dev/null)" || fail source_path
+[[ -n "${src}" ]] || fail source_path
+tree="$(g "${src}" rev-parse --show-toplevel)" || fail source_tree
+# No tags, no FETCH_HEAD, no auto maintenance or commit graph: the fetch
+# writes only the refs. Its own output goes to stderr, off the report line.
+g "${tree}" -c maintenance.auto=false -c fetch.writeCommitGraph=false \
+	fetch --quiet --no-tags --no-write-fetch-head origin "+refs/heads/main:${ref}" </dev/null >&2 || fail fetch
+origin_sha="$(g "${tree}" rev-parse --verify --quiet "${ref}^{commit}")" || fail rev_parse
+# symbolic-ref exits 1 for a detached HEAD and higher for an error.
+# --no-recurse: a HEAD on a branch that points at main is not main.
+head_state() {
+	if head_ref="$(g "${tree}" symbolic-ref --quiet --no-recurse HEAD)"; then
+		:
+	else
+		rc=$?
+		[[ "${rc}" == 1 ]] || fail symbolic_ref
+		head_ref=
+	fi
+	src_sha="$(g "${tree}" rev-parse --verify --quiet 'HEAD^{commit}')" || fail rev_parse
+}
+# Read the branch, commit and dirty state after the fetch, then read the
+# branch and commit again: a switch during these reads is an error, not a
+# mix of two states.
+head_state
+first="${head_ref} ${src_sha}"
+dirty="$(g "${tree}" status --porcelain --untracked-files=all)" || fail git_status
+head_state
+[[ "${head_ref} ${src_sha}" == "${first}" ]] || fail source_changed
+branch=detached
+[[ -z "${head_ref}" ]] || branch="${head_ref#refs/heads/}"
+behind="$(g "${tree}" rev-list --count "${src_sha}..${ref}")" || fail rev_list
+
+count() {
+	local n=0
+	if [[ -n "$1" ]]; then
+		while IFS= read -r _; do
+			n=$((n + 1))
+		done <<<"$1"
+	fi
+	echo "${n}"
+}
+dirty_lines="$(count "${dirty}")"
+drift=0
+if [[ "${dirty_lines}" != 0 || "${head_ref}" != refs/heads/main || "${src_sha}" != "${origin_sha}" ]]; then
+	drift=1
+fi
+emitted=1
+echo "drift=${drift} behind=${behind} dirty=${dirty_lines} branch=${branch} src_sha=${src_sha} origin_sha=${origin_sha}"
+exit "${drift}"
+{{- end -}}
