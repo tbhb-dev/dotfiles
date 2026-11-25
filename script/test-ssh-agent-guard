@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cspell:ignore identityagent keygen proxyjump testprefix
+# cspell:ignore identityagent keygen errexit nounset proxyjump shellopts testprefix
 # Render ~/.ssh/config under darwin data and ask ssh which IdentityAgent each
 # environment gets. Only a terminal profile's TBHB_OP_AGENT=1, with no ssh or
 # agent-harness variable, may reach the 1Password agent. No network, no agent.
@@ -100,6 +100,27 @@ if grep -q 'kill' "${out}/config"; then
 	echo "FAIL the guard is rendered without its data keys"
 	fail=1
 fi
+# Empty host entries are dropped, and a quote or space stops the render.
+render_refuse() {
+	"${CHEZMOI_BIN:-chezmoi}" execute-template \
+		--source "${src}" --config "${out}/chezmoi.toml" \
+		--override-data "${data%\}}"',"sshAgentRefuseUser":"'"$1"'","sshAgentRefuseHosts":'"$2"'}' \
+		<"${src}/private_dot_ssh/private_config.tmpl" 2>/dev/null
+}
+if render_refuse owner '[""]' | grep -q 'kill'; then
+	echo "FAIL the guard is rendered for an empty host entry"
+	fail=1
+fi
+if ! render_refuse owner '["", "a.invalid"]' | grep -q '^Match host "a.invalid" '; then
+	echo "FAIL an empty host entry is not dropped"
+	fail=1
+fi
+for bad in 'owner|["a b"]' 'owner|["a\"b"]' 'own er|["a.invalid"]'; do
+	if render_refuse "${bad%%|*}" "${bad#*|}" >/dev/null; then
+		echo "FAIL the render accepts a quote or space: ${bad}"
+		fail=1
+	fi
+done
 # guard_for <refused|allowed> <label> <config> VAR=value ... -- <ssh args>
 guard_for() {
 	local want="$1" label="$2" config="$3" got rc=0 err envs=()
@@ -123,10 +144,11 @@ guard_for() {
 	fi
 }
 g="${out}/guard_config"
-# Host and User lines ahead of the guard count even when they first match on
-# the final pass, once Hostname has changed the name.
-lines="Host alias.invalid\n  Hostname testprefix-qq06\nHost testprefix-qq07\n  User ${other}\nHost alias2.invalid\n  Hostname testprefix-qq08\nHost testprefix-qq08\n  User ${other}\n"
-awk -v lines="${lines}" '/^Match final/ { printf "%s", lines } { print }' "${out}/guard_config" >"${g}.new"
+# Hostname and User lines ahead of the guard count. ssh reads the file once,
+# so a Host block for the name that Hostname sets doesn't apply, and the guard
+# must not add a second pass: a RemoteCommand there would break an alias.
+lines="Host alias.invalid\n  Hostname testprefix-qq06\nHost testprefix-qq07\n  User ${other}\nHost alias2.invalid\n  Hostname testprefix-qq08\nHost testprefix-qq08\n  User ${other}\nHost batch.invalid\n  Hostname service.invalid\nHost service.invalid\n  RemoteCommand tmux attach\n"
+awk -v lines="${lines}" '/^Match host/ { printf "%s", lines } { print }' "${out}/guard_config" >"${g}.new"
 mv "${g}.new" "${g}"
 human=(TBHB_OP_AGENT=1)
 for sh in /bin/sh /bin/bash /bin/zsh; do
@@ -144,7 +166,7 @@ for sh in /bin/sh /bin/bash /bin/zsh; do
 	guard_for refused "${sh} trailing dot" "${g}" "${agent[@]}" -- "${me}@testprefix-qq04."
 	guard_for refused "${sh} later Hostname line" "${g}" "${agent[@]}" -- "${me}@alias.invalid"
 	guard_for allowed "${sh} later User line" "${g}" "${agent[@]}" -- testprefix-qq07
-	guard_for allowed "${sh} User line on the final pass" "${g}" "${agent[@]}" -- alias2.invalid
+	guard_for refused "${sh} User line under the Hostname name" "${g}" "${agent[@]}" -- alias2.invalid
 	guard_for refused "${sh} upper case" "${g}" "${agent[@]}" -- "${me}@TESTPREFIX-QQ04"
 	guard_for refused "${sh} -o Hostname" "${g}" "${agent[@]}" -- -o Hostname=testprefix-qq05 "${me}@other.invalid"
 	guard_for refused "${sh} -o ProxyCommand=none" "${g}" "${agent[@]}" -- -o ProxyCommand=none qq04
@@ -171,17 +193,18 @@ guard_for allowed "hop over ssh with a forwarded agent" "${g}" SSH_CONNECTION="1
 # Startup files can set a marker name without exporting it. Only the
 # inherited environment counts.
 printf 'CLAUDECODE=1\nCODEX_HOME=/x\n' >"${out}/startup"
-mkdir -p "${out}/zhome"
-cp "${out}/startup" "${out}/zhome/.zshenv"
+mkdir -p "${out}/startup-home"
+cp "${out}/startup" "${out}/startup-home/.zshenv"
 guard_for allowed "a marker set by BASH_ENV, not exported" "${g}" SHELL=/bin/bash BASH_ENV="${out}/startup" -- qq04
 if [[ -x /bin/zsh ]]; then
-	guard_for allowed "a marker set by .zshenv, not exported" "${g}" SHELL=/bin/zsh HOME="${out}/zhome" -- qq04
+	guard_for allowed "a marker set by .zshenv, not exported" "${g}" SHELL=/bin/zsh HOME="${out}/startup-home" -- qq04
 fi
-# A failed message must not skip the kill. /dev/full exists on Linux only.
+# A failed message must not skip the kill, even under errexit. /dev/full
+# exists on Linux only.
 for sh in /bin/sh /bin/bash /bin/zsh; do
 	[[ -x "${sh}" && -e /dev/full ]] || continue
 	rc=0
-	{ env -i HOME=/home/render PATH=/usr/bin:/bin SHELL="${sh}" CLAUDECODE=1 \
+	{ env -i HOME=/home/render PATH=/usr/bin:/bin SHELL="${sh}" SHELLOPTS=errexit CLAUDECODE=1 \
 		"${ssh_bin}" -T -G -F "${g}" qq04 >/dev/null 2>/dev/full || rc=$?; } 2>/dev/null
 	if [[ "${rc}" -eq 0 ]]; then
 		echo "FAIL guard ${sh} with stderr full: allowed, want refused"
@@ -189,6 +212,7 @@ for sh in /bin/sh /bin/bash /bin/zsh; do
 	fi
 done
 guard_for refused "a marker with nounset inherited" "${g}" SHELL=/bin/bash SHELLOPTS=nounset CLAUDECODE=1 -- qq04
+guard_for allowed "an alias with a command, no second pass" "${g}" SHELL=/bin/sh -- "${me}@batch.invalid" uptime
 guard_for allowed "a % token user, no marker" "${g}" SHELL=/bin/sh -- -o User=%u testprefix-qq04
 guard_for allowed "other user, % token in ControlPath" "${g}" CLAUDECODE=1 -- -o ControlPath=/tmp/x-%r "${other}@qq04"
 guard_for allowed "a TBHB_AGENT_ variable is not a marker" "${g}" TBHB_AGENT_RUN=1 -- qq04
