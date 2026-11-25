@@ -6,10 +6,11 @@
 {{- $sshShortPatterns := dig "sshShortHostPatterns" (list) . -}}
 {{- /* Opt-in per host: the owner's account and the host patterns where agent sessions may not use it. */ -}}
 {{- $sshRefuseUser := dig "sshAgentRefuseUser" "" . -}}
-{{- /* Empty entries are dropped. A quote or space would break every ssh, so it stops the render instead. */ -}}
+{{- /* Only plain names, since anything else could break every ssh or widen the match. Empty host entries are dropped. */ -}}
+{{- if and $sshRefuseUser (not (regexMatch "^[A-Za-z0-9_][A-Za-z0-9._-]*$" $sshRefuseUser)) -}}{{ fail "sshAgentRefuseUser must be one plain account name" }}{{- end -}}
 {{- $sshRefuseHosts := list -}}
 {{- range (dig "sshAgentRefuseHosts" (list) .) -}}
-{{- if or (regexMatch "[\\s\"]" $sshRefuseUser) (regexMatch "[\\s\"]" .) -}}{{ fail "sshAgentRefuseUser and sshAgentRefuseHosts may not contain quotes or spaces" }}{{- end -}}
+{{- if and . (not (regexMatch "^[A-Za-z0-9_*?][A-Za-z0-9._*?-]*$" .)) -}}{{ fail "sshAgentRefuseHosts entries must be plain host names or patterns" }}{{- end -}}
 {{- if . }}{{ $sshRefuseHosts = append $sshRefuseHosts . }}{{ end -}}
 {{- end -}}
 

@@ -100,7 +100,8 @@ if grep -q 'kill' "${out}/config"; then
 	echo "FAIL the guard is rendered without its data keys"
 	fail=1
 fi
-# Empty host entries are dropped, and a quote or space stops the render.
+# Empty host entries are dropped, and anything but a plain name or pattern
+# stops the render.
 render_refuse() {
 	"${CHEZMOI_BIN:-chezmoi}" execute-template \
 		--source "${src}" --config "${out}/chezmoi.toml" \
@@ -115,9 +116,9 @@ if ! render_refuse owner '["", "a.invalid"]' | grep -q '^Match host "a.invalid" 
 	echo "FAIL an empty host entry is not dropped"
 	fail=1
 fi
-for bad in 'owner|["a b"]' 'owner|["a\"b"]' 'own er|["a.invalid"]'; do
+for bad in 'owner|["a b"]' 'owner|["a\"b"]' "owner|[\"a'b\"]" 'owner|["a\\"]' 'owner|["#a"]' 'owner|["a\u000Bb"]' 'owner|["a,b"]' 'own er|["a.invalid"]' 'own er|[]' '#owner|["a.invalid"]' 'owner,ops|["a.invalid"]' '*|["a.invalid"]'; do
 	if render_refuse "${bad%%|*}" "${bad#*|}" >/dev/null; then
-		echo "FAIL the render accepts a quote or space: ${bad}"
+		echo "FAIL the render accepts bad data: ${bad}"
 		fail=1
 	fi
 done
