@@ -62,8 +62,8 @@ check() {
 		fail=1
 	fi
 }
-check plain mywin 'tbhb.account=tony,session_name=mywin'
-check dashes 'my-win_1' 'tbhb.account=tony,session_name=my-win_1'
+check plain alpha 'tbhb.account=tony,session_name=alpha'
+check dashes 'win-1_x' 'tbhb.account=tony,session_name=win-1_x'
 check messy 'my win,x"y' 'tbhb.account=tony,session_name=my_win_x_y'
 # One _ per character in a UTF-8 locale, one per byte in the C locale: run
 # under C (env -i) so the want is fixed.
