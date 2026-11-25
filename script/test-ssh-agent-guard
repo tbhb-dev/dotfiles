@@ -92,7 +92,14 @@ other=ops
 [[ "${me}" != "${other}" ]] || other=agent
 other2=agent
 [[ "${me}" != "${other2}" ]] || other2=ops
-guard_data="${data%\}}"',"sshShortHostPrefix":"testprefix-","sshShortHostPatterns":["qq??"],"sshAgentRefuseUser":"'"${me}"'","sshAgentRefuseHosts":["testprefix-qq0*"]}'
+# The guard refuses to name ops or agent, so as either account the ssh cases
+# can't run. The render checks still do.
+guarded="${me}" skip_guard=
+if [[ "${me}" == ops || "${me}" == agent ]]; then
+	echo "SKIP guard ssh cases: the local user ${me} can't be the guarded account"
+	guarded=owner skip_guard=1
+fi
+guard_data="${data%\}}"',"sshShortHostPrefix":"testprefix-","sshShortHostPatterns":["qq??"],"sshAgentRefuseUser":"'"${guarded}"'","sshAgentRefuseHosts":["testprefix-qq0*"]}'
 "${CHEZMOI_BIN:-chezmoi}" execute-template \
 	--source "${src}" --config "${out}/chezmoi.toml" --override-data "${guard_data}" \
 	<"${src}/private_dot_ssh/private_config.tmpl" >"${out}/guard_config"
@@ -116,7 +123,7 @@ if ! render_refuse owner '["", "a.invalid"]' | grep -q '^Match host "a.invalid" 
 	echo "FAIL an empty host entry is not dropped"
 	fail=1
 fi
-for bad in 'owner|["a b"]' 'owner|["a\"b"]' "owner|[\"a'b\"]" 'owner|["a\\"]' 'owner|["#a"]' 'owner|["a\u000Bb"]' 'owner|["a,b"]' 'own er|["a.invalid"]' 'own er|[]' '#owner|["a.invalid"]' 'owner,ops|["a.invalid"]' '*|["a.invalid"]'; do
+for bad in 'owner|["a b"]' 'owner|["a\"b"]' "owner|[\"a'b\"]" 'owner|["a\\"]' 'owner|["#a"]' 'owner|["a\u000Bb"]' 'owner|["a,b"]' 'own er|["a.invalid"]' 'own er|[]' '#owner|["a.invalid"]' 'owner,ops|["a.invalid"]' '*|["a.invalid"]' 'ops|["a.invalid"]' 'agent|["a.invalid"]'; do
 	if render_refuse "${bad%%|*}" "${bad#*|}" >/dev/null; then
 		echo "FAIL the render accepts bad data: ${bad}"
 		fail=1
@@ -125,6 +132,7 @@ done
 # guard_for <refused|allowed> <label> <config> VAR=value ... -- <ssh args>
 guard_for() {
 	local want="$1" label="$2" config="$3" got rc=0 err envs=()
+	[[ -z "${skip_guard}" ]] || return 0
 	shift 3
 	while [[ "$1" != "--" ]]; do
 		envs+=("$1")
@@ -203,7 +211,7 @@ fi
 # A failed message must not skip the kill, even under errexit. /dev/full
 # exists on Linux only.
 for sh in /bin/sh /bin/bash /bin/zsh; do
-	[[ -x "${sh}" && -e /dev/full ]] || continue
+	[[ -x "${sh}" && -e /dev/full && -z "${skip_guard}" ]] || continue
 	rc=0
 	{ env -i HOME=/home/render PATH=/usr/bin:/bin SHELL="${sh}" SHELLOPTS=errexit CLAUDECODE=1 \
 		"${ssh_bin}" -T -G -F "${g}" qq04 >/dev/null 2>/dev/full || rc=$?; } 2>/dev/null

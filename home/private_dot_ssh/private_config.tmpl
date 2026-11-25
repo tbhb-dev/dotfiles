@@ -8,6 +8,7 @@
 {{- $sshRefuseUser := dig "sshAgentRefuseUser" "" . -}}
 {{- /* Only plain names, since anything else could break every ssh or widen the match. Empty host entries are dropped. */ -}}
 {{- if and $sshRefuseUser (not (regexMatch "^[A-Za-z0-9_][A-Za-z0-9._-]*$" $sshRefuseUser)) -}}{{ fail "sshAgentRefuseUser must be one plain account name" }}{{- end -}}
+{{- if has $sshRefuseUser (list "ops" "agent") -}}{{ fail "sshAgentRefuseUser may not be ops or agent" }}{{- end -}}
 {{- $sshRefuseHosts := list -}}
 {{- range (dig "sshAgentRefuseHosts" (list) .) -}}
 {{- if and . (not (regexMatch "^[A-Za-z0-9_*?][A-Za-z0-9._*?-]*$" .)) -}}{{ fail "sshAgentRefuseHosts entries must be plain host names or patterns" }}{{- end -}}
