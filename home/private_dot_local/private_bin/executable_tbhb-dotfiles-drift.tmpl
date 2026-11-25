@@ -4,12 +4,12 @@
 # Report whether this host's dotfiles have drifted from origin/main. The
 # launchd agent (macOS) or systemd user timer (Linux) runs it every hour.
 #
-# It only fetches and reads: it never merges, checks out or applies, and never
-# runs a chezmoi run_ script. Every run prints exactly one line,
-#   drift=0|1 behind=N dirty=N branch=B status_lines=N|skipped src_sha=S origin_sha=O
+# It only fetches and reads git: it never merges, checks out or applies, and
+# never runs chezmoi beyond `chezmoi source-path`, so no run_ or modify_
+# script runs. It compares the source tree with origin/main only, not the
+# home directory. Every run prints exactly one line,
+#   drift=0|1 behind=N dirty=N branch=B src_sha=S origin_sha=O
 # and exits 1 on drift. A failure prints `drift=1 error=<step>` and exits 2.
-# `chezmoi status` runs only when the source is clean, on main and equal to
-# origin/main, so the only modify_ scripts it can run are committed ones.
 # No agent socket, prompt, askpass, credential helper or user ssh config
 # reaches git or ssh. Bash 3.2 compatible (macOS /bin/bash).
 set -euo pipefail
@@ -53,7 +53,8 @@ src="$(chezmoi source-path </dev/null)" || fail source_path
 [[ -n "${src}" ]] || fail source_path
 tree="$(g "${src}" rev-parse --show-toplevel)" || fail source_tree
 # symbolic-ref exits 1 for a detached HEAD and higher for an error.
-if head_ref="$(g "${tree}" symbolic-ref --quiet HEAD)"; then
+# --no-recurse: a HEAD on a branch that points at main is not main.
+if head_ref="$(g "${tree}" symbolic-ref --quiet --no-recurse HEAD)"; then
 	branch="${head_ref#refs/heads/}"
 else
 	rc=$?
@@ -62,7 +63,10 @@ else
 	branch=detached
 fi
 dirty="$(g "${tree}" status --porcelain --untracked-files=all)" || fail git_status
-g "${tree}" fetch --quiet --no-write-fetch-head origin "+refs/heads/main:${ref}" </dev/null || fail fetch
+# No tags, no FETCH_HEAD, no auto maintenance or commit graph: the fetch
+# writes only the refs. Its own output goes to stderr, off the report line.
+g "${tree}" -c maintenance.auto=false -c fetch.writeCommitGraph=false \
+	fetch --quiet --no-tags --no-write-fetch-head origin "+refs/heads/main:${ref}" </dev/null >&2 || fail fetch
 src_sha="$(g "${tree}" rev-parse --verify --quiet 'HEAD^{commit}')" || fail rev_parse
 origin_sha="$(g "${tree}" rev-parse --verify --quiet "${ref}^{commit}")" || fail rev_parse
 behind="$(g "${tree}" rev-list --count "HEAD..${ref}")" || fail rev_list
@@ -77,16 +81,11 @@ count() {
 	echo "${n}"
 }
 dirty_lines="$(count "${dirty}")"
-if [[ "${dirty_lines}" == 0 && "${head_ref}" == refs/heads/main && "${src_sha}" == "${origin_sha}" ]]; then
-	status="$(chezmoi status --no-tty --exclude=scripts </dev/null)" || fail chezmoi_status
-	status_lines="$(count "${status}")"
-	drift=0
-	[[ "${status_lines}" == 0 ]] || drift=1
-else
-	status_lines=skipped
+drift=0
+if [[ "${dirty_lines}" != 0 || "${head_ref}" != refs/heads/main || "${src_sha}" != "${origin_sha}" ]]; then
 	drift=1
 fi
 emitted=1
-echo "drift=${drift} behind=${behind} dirty=${dirty_lines} branch=${branch} status_lines=${status_lines} src_sha=${src_sha} origin_sha=${origin_sha}"
+echo "drift=${drift} behind=${behind} dirty=${dirty_lines} branch=${branch} src_sha=${src_sha} origin_sha=${origin_sha}"
 exit "${drift}"
-{{- end }}
+{{- end -}}

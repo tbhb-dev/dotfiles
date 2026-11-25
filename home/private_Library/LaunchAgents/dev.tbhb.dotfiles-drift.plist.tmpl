@@ -1,7 +1,9 @@
 {{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
 {{- $brewPrefix := "/opt/homebrew" -}}
 {{- $home := .chezmoi.homeDir | replace "&" "&amp;" | replace "<" "&lt;" | replace ">" "&gt;" -}}
-{{- if not $isDevcontainer -}}
+{{- /* Skip the job for a home path with whitespace, quotes, a backslash, % or $. */ -}}
+{{- $oddHome := regexMatch "[[:space:]\"'\\\\%$]" .chezmoi.homeDir -}}
+{{- if and (not $isDevcontainer) (not $oddHome) -}}
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Runs ~/.local/bin/tbhb-dotfiles-drift every hour. Loaded by
@@ -29,4 +31,4 @@
 	<string>{{ $home }}/Library/Logs/tbhb-dotfiles-drift.log</string>
 </dict>
 </plist>
-{{- end }}
+{{- end -}}

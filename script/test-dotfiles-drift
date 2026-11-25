@@ -38,7 +38,8 @@ printf '[user]\n\tname = t\n\temail = t@example.invalid\n[commit]\n\tgpgsign = f
 # forbidden verb in forbidden.log. FAIL_SOURCE_PATH=empty|exit breaks
 # chezmoi source-path; FAIL_FETCH breaks git fetch; FAIL_SYMREF breaks git
 # symbolic-ref; INTERLEAVE_FETCH=<repo> fetches origin topic into that repo's
-# FETCH_HEAD right after each fetch, like a concurrent fetch would.
+# FETCH_HEAD right after each fetch, like a concurrent fetch would;
+# FETCH_NOISE makes fetch print to stdout and stderr first.
 mkdir -p "${out}/bin"
 cat >"${out}/bin/git" <<EOF
 #!/bin/sh
@@ -52,9 +53,13 @@ for a in "\$@"; do
 	symbolic-ref) [ -n "\${FAIL_SYMREF-}" ] && exit 128 ;;
 	esac
 done
-echo "params=\${GIT_CONFIG_PARAMETERS-unset} key1=\${GIT_CONFIG_KEY_1-unset} sock=\${SSH_AUTH_SOCK-unset} op=\${TBHB_OP_AGENT-unset} prompt=\${GIT_TERMINAL_PROMPT-unset} askpass=\${GIT_ASKPASS-unset} sshpass=\${SSH_ASKPASS-unset} sshreq=\${SSH_ASKPASS_REQUIRE-unset} cred=\${GIT_CONFIG_COUNT-unset}:\${GIT_CONFIG_KEY_0-unset}=\${GIT_CONFIG_VALUE_0-unset} ssh=\${GIT_SSH_COMMAND-unset} git \$*" >>"${out}/git.log"
+echo "params=\${GIT_CONFIG_PARAMETERS-unset} key1=\${GIT_CONFIG_KEY_1-unset} value1=\${GIT_CONFIG_VALUE_1-unset} sock=\${SSH_AUTH_SOCK-unset} op=\${TBHB_OP_AGENT-unset} prompt=\${GIT_TERMINAL_PROMPT-unset} askpass=\${GIT_ASKPASS-unset} sshpass=\${SSH_ASKPASS-unset} sshreq=\${SSH_ASKPASS_REQUIRE-unset} cred=\${GIT_CONFIG_COUNT-unset}:\${GIT_CONFIG_KEY_0-unset}=\${GIT_CONFIG_VALUE_0-unset} ssh=\${GIT_SSH_COMMAND-unset} git \$*" >>"${out}/git.log"
 case " \$* " in
 *" fetch "*)
+	if [ -n "\${FETCH_NOISE-}" ]; then
+		echo fetch-stdout
+		echo fetch-stderr >&2
+	fi
 	if [ -n "\${INTERLEAVE_FETCH-}" ]; then
 		"${real_git}" "\$@" || exit
 		exec "${real_git}" -C "\${INTERLEAVE_FETCH}" fetch -q origin topic
@@ -70,7 +75,6 @@ source-path)
 	[ "\${FAIL_SOURCE_PATH-}" = empty ] && exit 0
 	[ "\${FAIL_SOURCE_PATH-}" = exit ] && exit 1
 	;;
-status) ;;
 *)
 	echo "chezmoi \$*" >>"${out}/forbidden.log"
 	exit 99
@@ -145,11 +149,13 @@ field() { tr ' ' '\n' <<<"${line}" | sed -n "s/^$1=//p"; }
 # 1. In sync: drift=0, exit 0, both shas equal.
 run
 check "in sync exits 0 (${line})" '[[ ${rc} -eq 0 ]]'
-check "in sync line" 'exactly "drift=0 behind=0 dirty=0 branch=main status_lines=0 src_sha=$(sha "${clone}") origin_sha=$(sha "${clone}")"'
-want_env="params=unset key1=unset sock=unset op=unset prompt=0 askpass=/bin/false sshpass=/bin/false sshreq=never cred=1:credential.helper= ssh=ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none git "
+check "in sync line" 'exactly "drift=0 behind=0 dirty=0 branch=main src_sha=$(sha "${clone}") origin_sha=$(sha "${clone}")"'
+want_env="params=unset key1=unset value1=unset sock=unset op=unset prompt=0 askpass=/bin/false sshpass=/bin/false sshreq=never cred=1:credential.helper= ssh=ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none git "
 check "git sees no agent, prompt, askpass or helper" '[[ -s "${out}/git.log" ]] && ! grep -vF "${want_env}" "${out}/git.log" | grep -q .'
-check "git fetch runs into the private ref" 'grep -q "git .*fetch --quiet --no-write-fetch-head origin +refs/heads/main:refs/tbhb-dotfiles-drift/origin-main" "${out}/git.log"'
-check "chezmoi status runs without scripts" 'grep -qx "chezmoi status --no-tty --exclude=scripts" "${out}/chezmoi.log"'
+check "git fetch runs into the private ref" 'grep -q "git .*-c maintenance.auto=false -c fetch.writeCommitGraph=false fetch --quiet --no-tags --no-write-fetch-head origin +refs/heads/main:refs/tbhb-dotfiles-drift/origin-main" "${out}/git.log"'
+check "chezmoi runs only source-path" '[[ $(cat "${out}/chezmoi.log") == "chezmoi source-path" ]]'
+run FETCH_NOISE=1
+check "fetch output stays off the report (${line})" '[[ ${rc} -eq 0 ]] && exactly "drift=0 behind=0 dirty=0 branch=main src_sha=$(sha "${clone}") origin_sha=$(sha "${clone}")"'
 
 # 2. Origin ahead, with a changed run_onchange script: behind=1, and the
 # source and home stay as they were.
@@ -163,44 +169,43 @@ check "behind reports both shas" '[[ $(field src_sha) == "${before}" && $(field 
 check "behind leaves the source" '[[ $(sha "${clone}") == "${before}" ]]'
 check "behind applies nothing" '[[ ! -e "${home}/.two" ]]'
 check "behind runs no script" '[[ $(cat "${home}/ran") == v1 ]]'
-check "behind skips chezmoi status" '[[ $(field status_lines) == skipped ]] && ! grep -q "^chezmoi status" "${out}/chezmoi.log"'
 check "behind prints one line" 'one_line'
 "${real_git}" -C "${clone}" merge -q --ff-only origin/main
 HOME="${home}" "${chezmoi_bin}" apply --no-tty
 
-# 3. A changed home file: status_lines counts it.
-echo mine >"${home}/.one"
-run
-check "home change exits 1 (${line})" '[[ ${rc} -eq 1 && $(field status_lines) -ge 1 && $(field behind) == 0 ]]'
-echo one >"${home}/.one"
-
 # 4. A dirty source, tracked and untracked.
 echo dirty >>"${clone}/home/dot_one"
 run
-check "tracked change exits 1 (${line})" '[[ ${rc} -eq 1 && $(field dirty) == 1 && $(field status_lines) == skipped ]]'
-check "dirty source skips chezmoi status" '! grep -q "^chezmoi status" "${out}/chezmoi.log"'
+check "tracked change exits 1 (${line})" '[[ ${rc} -eq 1 && $(field dirty) == 1 ]]'
 "${real_git}" -C "${clone}" checkout -q -- home/dot_one
 echo new >"${clone}/home/dot_untracked"
 "${real_git}" -C "${clone}" config status.showUntrackedFiles no
 run
 check "untracked file exits 1 (${line})" '[[ ${rc} -eq 1 && $(field dirty) == 1 ]]'
 rm "${clone}/home/dot_untracked"
-# An untracked modify_ script never runs: a dirty source skips chezmoi status.
+# An untracked modify_ script never runs: the job never runs chezmoi status.
 printf '#!/bin/sh\ntouch "${HOME}/modified"\ncat\n' >"${clone}/home/modify_dot_three"
 run
-check "untracked modify_ exits 1 (${line})" '[[ ${rc} -eq 1 && $(field dirty) == 1 && $(field status_lines) == skipped ]]'
+check "untracked modify_ exits 1 (${line})" '[[ ${rc} -eq 1 && $(field dirty) == 1 ]]'
 check "untracked modify_ never runs" '[[ ! -e "${home}/modified" ]]'
 rm "${clone}/home/modify_dot_three"
 
 # 5. Off main.
 "${real_git}" -C "${clone}" checkout -qb topic
 run
-check "off main exits 1 (${line})" '[[ ${rc} -eq 1 && $(field branch) == topic && $(field status_lines) == skipped ]]'
+check "off main exits 1 (${line})" '[[ ${rc} -eq 1 && $(field branch) == topic ]]'
 "${real_git}" -C "${clone}" checkout -q main
 "${real_git}" -C "${clone}" branch -qD topic
+# A branch that is a symbolic ref to main is not main.
+"${real_git}" -C "${clone}" symbolic-ref refs/heads/alias refs/heads/main
+"${real_git}" -C "${clone}" symbolic-ref HEAD refs/heads/alias
+run
+check "symbolic alias of main exits 1 (${line})" '[[ ${rc} -eq 1 && $(field branch) == alias ]]'
+"${real_git}" -C "${clone}" symbolic-ref HEAD refs/heads/main
+"${real_git}" -C "${clone}" update-ref -d --no-deref refs/heads/alias
 "${real_git}" -C "${clone}" checkout -q --detach
 run
-check "detached exits 1 (${line})" '[[ ${rc} -eq 1 && $(field branch) == detached && $(field status_lines) == skipped ]]'
+check "detached exits 1 (${line})" '[[ ${rc} -eq 1 && $(field branch) == detached ]]'
 "${real_git}" -C "${clone}" checkout -q main
 # A tag named main does not change the branch.
 "${real_git}" -C "${clone}" tag main
@@ -210,7 +215,7 @@ check "tag named main stays in sync (${line})" '[[ ${rc} -eq 0 && $(field branch
 # A local commit ahead of origin is drift too.
 "${real_git}" -C "${clone}" commit -q --allow-empty -m local
 run
-check "ahead exits 1 (${line})" '[[ ${rc} -eq 1 && $(field behind) == 0 && $(field status_lines) == skipped && $(field src_sha) != $(field origin_sha) ]]'
+check "ahead exits 1 (${line})" '[[ ${rc} -eq 1 && $(field behind) == 0 && $(field src_sha) != $(field origin_sha) ]]'
 "${real_git}" -C "${clone}" reset -q --hard origin/main
 
 # 5b. A concurrent fetch that rewrites FETCH_HEAD does not hide drift.
@@ -254,7 +259,7 @@ for tmpl in private_dot_local/private_bin/executable_tbhb-dotfiles-drift.tmpl \
 	run_onchange_after_load-dotfiles-drift.sh.tmpl; do
 	for var in REMOTE_CONTAINERS=1 CODESPACES=1; do
 		for os in linux darwin; do
-			check "${tmpl} empty on ${os} with ${var}" '[[ -z "$(render "${os}" /home/r "${tmpl}" "${var}")" ]]'
+			check "${tmpl} empty on ${os} with ${var}" '[[ $(render "${os}" /home/r "${tmpl}" "${var}" | wc -c) -eq 0 ]]'
 		done
 	done
 done
@@ -280,38 +285,42 @@ done
 # 8. Nothing ever called a forbidden verb or ran a run_ script.
 check "no merge, checkout, apply or other write" '[[ ! -s "${out}/forbidden.log" ]]'
 
-# 9. The plist escapes the home path, and the service quotes it.
-plist="$(render darwin '/home/r & <d>' private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl)"
-check "plist escapes the home path" 'grep -qF "<string>/home/r &amp; &lt;d&gt;/.local/bin/tbhb-dotfiles-drift</string>" <<<"${plist}"'
+# 9. A home path with whitespace, quotes, a backslash, % or $ gets no job.
+for odd in '/home/r x' "/home/r'x" '/home/r"x' '/home/r\x' '/home/r%x' '/home/r$x'; do
+	for tmpl in private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl \
+		private_dot_config/systemd/user/tbhb-dotfiles-drift.timer.tmpl \
+		private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl \
+		run_onchange_after_load-dotfiles-drift.sh.tmpl; do
+		for os in linux darwin; do
+			check "${tmpl} empty on ${os} for ${odd}" '[[ $(render "${os}" "${odd}" "${tmpl}" | wc -c) -eq 0 ]]'
+		done
+	done
+done
+
+# 10. The plist escapes XML in the home path, and the units verify.
+plist="$(render darwin '/home/r&<d>' private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl)"
+check "plist escapes the home path" 'grep -qF "<string>/home/r&amp;&lt;d&gt;/.local/bin/tbhb-dotfiles-drift</string>" <<<"${plist}"'
 if command -v plutil >/dev/null; then
 	check "plist lints" 'plutil -lint -s - <<<"${plist}"'
 fi
-service="$(render linux '/home/r dir' private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl)"
+service="$(render linux /home/r private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl)"
 check "service sets its syslog identifier" 'grep -qx "SyslogIdentifier=tbhb-dotfiles-drift" <<<"${service}"'
-check "service quotes ExecStart" 'grep -qx "ExecStart=\"/home/r dir/.local/bin/tbhb-dotfiles-drift\"" <<<"${service}"'
-# Specifier, variable, quote and backslash characters in the home path.
-odd="${out}/h dir%l\$USER\"q\\b"
-service="$(render linux "${odd}" private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl)"
-esc="${odd//\\/\\\\}"
-esc="${esc//\"/\\\"}"
-esc="${esc//%/%%}"
-check "service escapes ExecStart" 'grep -qxF "ExecStart=\"${esc//\$/\$\$}/.local/bin/tbhb-dotfiles-drift\"" <<<"${service}"'
-check "service escapes PATH" 'grep -qF ":${esc}/.local/bin:" <<<"${service}"'
+check "service quotes ExecStart" 'grep -qx "ExecStart=\"/home/r/.local/bin/tbhb-dotfiles-drift\"" <<<"${service}"'
 if command -v systemd-analyze >/dev/null; then
-	mkdir -p "${odd}/.local/bin"
-	printf '#!/bin/sh\n' >"${odd}/.local/bin/tbhb-dotfiles-drift"
-	chmod +x "${odd}/.local/bin/tbhb-dotfiles-drift"
-	printf '%s\n' "${service}" >"${out}/tbhb-dotfiles-drift.service"
-	check "systemd finds ExecStart in the odd home" 'systemd-analyze verify "${out}/tbhb-dotfiles-drift.service"'
+	mkdir -p "${out}/unit-home/.local/bin" "${out}/units"
+	printf '#!/bin/sh\n' >"${out}/unit-home/.local/bin/tbhb-dotfiles-drift"
+	chmod +x "${out}/unit-home/.local/bin/tbhb-dotfiles-drift"
+	render linux "${out}/unit-home" private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl >"${out}/units/tbhb-dotfiles-drift.service"
+	render linux "${out}/unit-home" private_dot_config/systemd/user/tbhb-dotfiles-drift.timer.tmpl >"${out}/units/tbhb-dotfiles-drift.timer"
+	check "systemd verifies the units" 'systemd-analyze verify "${out}/units/tbhb-dotfiles-drift.service" "${out}/units/tbhb-dotfiles-drift.timer"'
 fi
-# The macOS loader passes the plist path through untouched.
-render darwin "${odd}" run_onchange_after_load-dotfiles-drift.sh.tmpl >"${out}/loader"
+render darwin /home/r run_onchange_after_load-dotfiles-drift.sh.tmpl >"${out}/loader"
 : >"${out}/manager.log"
 PATH="${out}/stub:/usr/bin:/bin" /bin/bash "${out}/loader" || {
 	echo "FAIL loader exits $?"
 	fail=1
 }
-check "macOS loader keeps the odd plist path" 'grep -qxF "launchctl bootstrap gui/$(id -u) ${odd}/Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist" "${out}/manager.log"'
+check "macOS loader bootstraps the plist" 'grep -qxF "launchctl bootstrap gui/$(id -u) /home/r/Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist" "${out}/manager.log"'
 render linux /home/r run_onchange_after_load-dotfiles-drift.sh.tmpl >"${out}/loader"
 : >"${out}/manager.log"
 PATH="${out}/stub:/usr/bin:/bin" /bin/bash "${out}/loader" || {
