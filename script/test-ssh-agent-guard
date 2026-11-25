@@ -162,14 +162,13 @@ trap - TERM
 guard_for refused "CLAUDECODE alone" "${g}" CLAUDECODE=1 -- qq04
 guard_for refused "CODEX_HOME alone" "${g}" CODEX_HOME=/x -- qq04
 guard_for refused "CODEX_THREAD_ID alone" "${g}" CODEX_THREAD_ID=x -- qq04
-guard_for refused "TBHB_AGENT_ prefix" "${g}" TBHB_AGENT_RUN=x -- qq04
-guard_for refused "TBHB_AGENT bare name" "${g}" TBHB_AGENT=1 -- qq04
 guard_for refused "marker with the terminal profile" "${g}" "${human[@]}" CODEX_THREAD_ID=x -- qq04
 # No marker: the owner's non-terminal use passes.
 guard_for allowed "env -i, no marker" "${g}" SHELL=/bin/sh -- qq04
 guard_for allowed "hop over ssh, no marker" "${g}" SSH_CONNECTION="1 2 3 4" -- "${me}@testprefix-qq04"
 guard_for allowed "hop over ssh with a forwarded agent" "${g}" SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK=/tmp/fwd/agent -- qq04
-guard_for allowed "a value that only contains the prefix" "${g}" NOTE=TBHB_AGENT -- qq04
+guard_for allowed "a TBHB_AGENT_ variable is not a marker" "${g}" TBHB_AGENT_RUN=1 -- qq04
+guard_for allowed "a multi-line value" "${g}" NOTES="$(printf 'todo:\nTBHB_AGENT_RUN=1\nCLAUDECODE=1')" -- qq04
 guard_for allowed "TBHB_OP_AGENT is not a marker" "${g}" TBHB_OP_AGENT=0 -- qq04
 guard_for allowed "terminal profile, user@host" "${g}" "${human[@]}" -- "${me}@testprefix-qq04"
 guard_for allowed "terminal profile, -l" "${g}" "${human[@]}" -- -l "${me}" testprefix-qq04

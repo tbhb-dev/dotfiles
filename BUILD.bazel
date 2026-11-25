@@ -239,6 +239,18 @@ sh_test(
     env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
 )
 
+# Starts a throwaway tmux server the way an agent harness would, with its
+# variables set, and checks that no later pane inherits them. Skips without tmux.
+sh_test(
+    name = "tmux_agent_markers_test",
+    srcs = ["script/test-tmux-agent-markers"],
+    data = [
+        ":chezmoi",
+        "//:home_files",
+    ],
+    env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
+)
+
 filegroup(
     name = "home_files",
     srcs = glob(

@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# An agent harness can start the tmux server with CLAUDECODE, CODEX_HOME or
+# CODEX_THREAD_ID set. The rendered .tmux.conf must keep those out of every
+# later pane, or the owner's panes are read as agent shells and ~/.ssh/config
+# refuses them. Starts a throwaway server on its own socket; no network.
+set -euo pipefail
+
+root="${TEST_SRCDIR:+${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}}"
+root="${root:-$(cd "$(dirname "$0")/.." && pwd)}"
+src="${root}/home"
+PATH="${PATH}:/opt/homebrew/bin:/usr/local/bin"
+tmux_bin="$(command -v tmux || true)"
+if [[ -z "${tmux_bin}" ]]; then
+	echo "SKIP tmux agent markers: no tmux on PATH"
+	exit 0
+fi
+# A short directory: a Unix socket path has a length limit.
+out="$(mktemp -d /tmp/tmux.XXXXXX)"
+sock="t$$"
+trap 'TMUX_TMPDIR="${out}" "${tmux_bin}" -L "${sock}" kill-server 2>/dev/null || true; rm -rf "${out}"' EXIT
+mkdir -p "${out}/home"
+: >"${out}/chezmoi.toml"
+data="{\"chezmoi\":{\"os\":\"linux\",\"arch\":\"arm64\",\"homeDir\":\"${out}/home\",\"username\":\"render\",\"hostname\":\"render\",\"sourceDir\":\"${src}\",\"kernel\":{\"osrelease\":\"6.0.0\"}}}"
+"${CHEZMOI_BIN:-chezmoi}" execute-template \
+	--source "${src}" --config "${out}/chezmoi.toml" --override-data "${data}" \
+	<"${src}/dot_tmux.conf.tmpl" >"${out}/tmux.conf"
+
+# Each pane appends its label and the three variables, then waits.
+# shellcheck disable=SC2016 # the probe expands its variables when it runs
+printf '#!/bin/sh\nprintf "%%s %%s:%%s:%%s\\n" "$1" "${CLAUDECODE-unset}" "${CODEX_HOME-unset}" "${CODEX_THREAD_ID-unset}" >>"$OUT"\nsleep 30\n' >"${out}/probe"
+chmod +x "${out}/probe"
+export OUT="${out}/panes"
+: >"${OUT}"
+p="${out}/probe"
+t() { env -i HOME="${out}/home" PATH="${PATH}" TERM=xterm-256color SHELL=/bin/sh OUT="${OUT}" TMUX_TMPDIR="${out}" "$@"; }
+tm() { t "${tmux_bin}" -L "${sock}" "$@"; }
+# attached <tmux args>: run a tmux client on a pseudo-terminal.
+attached() {
+	local cmd
+	if script --version >/dev/null 2>&1; then
+		printf -v cmd '%q ' "${tmux_bin}" -L "${sock}" "$@"
+		t script -q -c "${cmd}" /dev/null >/dev/null 2>&1 </dev/null
+	else
+		t script -q /dev/null "${tmux_bin}" -L "${sock}" "$@" >/dev/null 2>&1 </dev/null
+	fi
+}
+
+t CLAUDECODE=1 CODEX_HOME=/x CODEX_THREAD_ID=x "${tmux_bin}" -L "${sock}" -f "${out}/tmux.conf" \
+	new-session -d -s agent "${p} agent-first-pane"
+tm new-session -d -s owner "${p} new-session"
+tm new-window -t owner "${p} new-window"
+tm split-window -t owner "${p} split-window"
+tm new-window -t agent "${p} new-window-in-the-agent-session"
+attached attach -t owner \; new-window "${p} attached-client-new-window" \; split-window "${p} attached-client-split-window" \; detach-client
+
+want=(agent-first-pane new-session new-window split-window new-window-in-the-agent-session attached-client-new-window attached-client-split-window)
+for _ in $(seq 50); do
+	n="$(wc -l <"${OUT}")" || n=0
+	[[ "${n}" -ge "${#want[@]}" ]] && break
+	sleep 0.1
+done
+
+fail=0
+global="$(tm show-environment -g | grep -E '^(CLAUDECODE|CODEX_HOME|CODEX_THREAD_ID)=' || true)"
+if [[ -n "${global}" ]]; then
+	echo "FAIL global environment keeps: ${global//$'\n'/ }"
+	fail=1
+fi
+for label in "${want[@]}"; do
+	got="$(awk -v l="${label}" '$1 == l { print $2 }' "${OUT}")"
+	if [[ "${got}" != "unset:unset:unset" ]]; then
+		echo "FAIL pane ${label}: CLAUDECODE:CODEX_HOME:CODEX_THREAD_ID is ${got:-missing}, want unset:unset:unset"
+		fail=1
+	fi
+done
+[[ "${fail}" -eq 0 ]] && echo "tmux agent markers: all cases pass"
+exit "${fail}"
