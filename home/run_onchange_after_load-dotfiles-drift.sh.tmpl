@@ -1,0 +1,28 @@
+{{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- /* Skip the job for a home path with whitespace, quotes, a backslash, % or $. */ -}}
+{{- $oddHome := regexMatch "[[:space:]\"'\\\\%$]" .chezmoi.homeDir -}}
+{{- if and (not $isDevcontainer) (not $oddHome) -}}
+#!/bin/bash
+# Load the hourly tbhb-dotfiles-drift job, and reload it when its unit changes.
+set -euo pipefail
+# A file rendered on the host can still run inside a devcontainer.
+if [[ -n "${REMOTE_CONTAINERS:-}" || -n "${CODESPACES:-}" ]]; then
+	exit 0
+fi
+{{- if eq .chezmoi.os "darwin" }}
+# plist hash: {{ include "private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl" | sha256sum }}
+domain="gui/$(id -u)"
+launchctl bootout "${domain}/dev.tbhb.dotfiles-drift" 2>/dev/null || true
+# Without a GUI session bootstrap fails; warn and let chezmoi apply go on.
+if ! launchctl bootstrap "${domain}" "{{ .chezmoi.homeDir }}/Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist"; then
+	echo "tbhb-dotfiles-drift: launchctl bootstrap failed; the hourly drift check is not loaded" >&2
+fi
+{{- else if eq .chezmoi.os "linux" }}
+# unit hash: {{ include "private_dot_config/systemd/user/tbhb-dotfiles-drift.service.tmpl" | sha256sum }} {{ include "private_dot_config/systemd/user/tbhb-dotfiles-drift.timer.tmpl" | sha256sum }}
+# Without a user manager or session bus systemctl fails; warn and let
+# chezmoi apply go on.
+if ! systemctl --user daemon-reload || ! systemctl --user enable --now tbhb-dotfiles-drift.timer; then
+	echo "tbhb-dotfiles-drift: systemd user manager unavailable; the hourly drift timer is not enabled" >&2
+fi
+{{- end }}
+{{- end -}}

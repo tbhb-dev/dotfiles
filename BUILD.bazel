@@ -237,6 +237,18 @@ sh_test(
     env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
 )
 
+# Runs tbhb-dotfiles-drift against a throwaway origin, clone and home: it
+# reports each kind of drift and never merges, checks out or applies.
+sh_test(
+    name = "dotfiles_drift_test",
+    srcs = ["script/test-dotfiles-drift"],
+    data = [
+        ":chezmoi",
+        "//:home_files",
+    ],
+    env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
+)
+
 filegroup(
     name = "home_files",
     srcs = glob(

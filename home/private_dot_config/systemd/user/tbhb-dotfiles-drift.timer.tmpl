@@ -1,0 +1,15 @@
+{{- $isDevcontainer := or (env "REMOTE_CONTAINERS") (env "CODESPACES") -}}
+{{- /* Skip the job for a home path with whitespace, quotes, a backslash, % or $. */ -}}
+{{- $oddHome := regexMatch "[[:space:]\"'\\\\%$]" .chezmoi.homeDir -}}
+{{- if and (eq .chezmoi.os "linux") (not $isDevcontainer) (not $oddHome) -}}
+# Enabled by run_onchange_after_load-dotfiles-drift.sh.
+[Unit]
+Description=Run tbhb-dotfiles-drift every hour
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target
+{{- end -}}
