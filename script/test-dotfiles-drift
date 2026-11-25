@@ -39,7 +39,9 @@ printf '[user]\n\tname = t\n\temail = t@example.invalid\n[commit]\n\tgpgsign = f
 # chezmoi source-path; FAIL_FETCH breaks git fetch; FAIL_SYMREF breaks git
 # symbolic-ref; INTERLEAVE_FETCH=<repo> fetches origin topic into that repo's
 # FETCH_HEAD right after each fetch, like a concurrent fetch would;
-# FETCH_NOISE makes fetch print to stdout and stderr first.
+# FETCH_NOISE makes fetch print to stdout and stderr first;
+# SWITCH_DURING_FETCH=<repo> switches that repo to branch topic after the
+# fetch, like a checkout racing the job.
 mkdir -p "${out}/bin"
 cat >"${out}/bin/git" <<EOF
 #!/bin/sh
@@ -59,6 +61,10 @@ case " \$* " in
 	if [ -n "\${FETCH_NOISE-}" ]; then
 		echo fetch-stdout
 		echo fetch-stderr >&2
+	fi
+	if [ -n "\${SWITCH_DURING_FETCH-}" ]; then
+		"${real_git}" "\$@" || exit
+		exec "${real_git}" -C "\${SWITCH_DURING_FETCH}" checkout -q topic
 	fi
 	if [ -n "\${INTERLEAVE_FETCH-}" ]; then
 		"${real_git}" "\$@" || exit
@@ -150,7 +156,7 @@ field() { tr ' ' '\n' <<<"${line}" | sed -n "s/^$1=//p"; }
 run
 check "in sync exits 0 (${line})" '[[ ${rc} -eq 0 ]]'
 check "in sync line" 'exactly "drift=0 behind=0 dirty=0 branch=main src_sha=$(sha "${clone}") origin_sha=$(sha "${clone}")"'
-want_env="params=unset key1=unset value1=unset sock=unset op=unset prompt=0 askpass=/bin/false sshpass=/bin/false sshreq=never cred=1:credential.helper= ssh=ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none git "
+want_env="params=unset key1=unset value1=unset sock=unset op=unset prompt=0 askpass=/bin/false sshpass=/bin/false sshreq=never cred=1:credential.helper= ssh=ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none -o UpdateHostKeys=no git "
 check "git sees no agent, prompt, askpass or helper" '[[ -s "${out}/git.log" ]] && ! grep -vF "${want_env}" "${out}/git.log" | grep -q .'
 check "git fetch runs into the private ref" 'grep -q "git .*-c maintenance.auto=false -c fetch.writeCommitGraph=false fetch --quiet --no-tags --no-write-fetch-head origin +refs/heads/main:refs/tbhb-dotfiles-drift/origin-main" "${out}/git.log"'
 check "chezmoi runs only source-path" '[[ $(cat "${out}/chezmoi.log") == "chezmoi source-path" ]]'
@@ -227,6 +233,16 @@ check "interleaved fetch did rewrite FETCH_HEAD" 'grep -q "refs/heads/topic\|bra
 "${real_git}" -C "${clone}" merge -q --ff-only origin/main
 HOME="${home}" "${chezmoi_bin}" apply --no-tty
 
+# 5b2. A switch to a branch at the fetched tip during the fetch is still drift.
+push_origin dot_five five
+"${real_git}" -C "${clone}" fetch -q origin main:topic
+run SWITCH_DURING_FETCH="${clone}"
+check "switch during fetch is drift (${line})" '[[ ${rc} -eq 1 && $(field branch) == topic ]]'
+"${real_git}" -C "${clone}" checkout -q main
+"${real_git}" -C "${clone}" branch -qD topic
+"${real_git}" -C "${clone}" merge -q --ff-only origin/main
+HOME="${home}" "${chezmoi_bin}" apply --no-tty
+
 # 5c. The job writes no index and runs no fsmonitor hook.
 printf '#!/bin/sh\ntouch "%s/fsmonitor-ran"\nexit 1\n' "${out}" >"${out}/fsmonitor"
 chmod +x "${out}/fsmonitor"
@@ -267,7 +283,7 @@ done
 # A loader rendered on the host does nothing inside a devcontainer.
 mkdir -p "${out}/stub"
 for cmd in launchctl systemctl; do
-	printf '#!/bin/sh\nprintf "%%s\\n" "%s $*" >>"%s/manager.log"\n' "${cmd}" "${out}" >"${out}/stub/${cmd}"
+	printf '#!/bin/sh\nprintf "%%s\\n" "%s $*" >>"%s/manager.log"\n[ -z "${FAIL_MANAGER-}" ]\n' "${cmd}" "${out}" >"${out}/stub/${cmd}"
 	chmod +x "${out}/stub/${cmd}"
 done
 for os in linux darwin; do
@@ -299,6 +315,7 @@ done
 
 # 10. The plist escapes XML in the home path, and the units verify.
 plist="$(render darwin '/home/r&<d>' private_Library/LaunchAgents/dev.tbhb.dotfiles-drift.plist.tmpl)"
+check "plist PATH has ~/.local/bin" 'grep -qF "<string>/opt/homebrew/bin:/home/r&amp;&lt;d&gt;/.local/bin:/usr/bin:" <<<"${plist}"'
 check "plist escapes the home path" 'grep -qF "<string>/home/r&amp;&lt;d&gt;/.local/bin/tbhb-dotfiles-drift</string>" <<<"${plist}"'
 if command -v plutil >/dev/null; then
 	check "plist lints" 'plutil -lint -s - <<<"${plist}"'
@@ -328,6 +345,14 @@ PATH="${out}/stub:/usr/bin:/bin" /bin/bash "${out}/loader" || {
 	fail=1
 }
 check "Linux loader enables the timer" '[[ $(cat "${out}/manager.log") == "systemctl --user daemon-reload"$'"'"'\n'"'"'"systemctl --user enable --now tbhb-dotfiles-drift.timer" ]]'
+
+# 11. Without a user manager or GUI session the loader warns and exits 0.
+for os in linux darwin; do
+	render "${os}" /home/r run_onchange_after_load-dotfiles-drift.sh.tmpl >"${out}/loader"
+	lrc=0
+	FAIL_MANAGER=1 PATH="${out}/stub:/usr/bin:/bin" /bin/bash "${out}/loader" 2>"${out}/loader.err" || lrc=$?
+	check "${os} loader exits 0 when the manager fails (${lrc})" '[[ ${lrc} -eq 0 ]] && grep -q "tbhb-dotfiles-drift: .* not " "${out}/loader.err"'
+done
 
 [[ "${fail}" -eq 0 ]] && echo "dotfiles drift: all cases pass"
 exit "${fail}"

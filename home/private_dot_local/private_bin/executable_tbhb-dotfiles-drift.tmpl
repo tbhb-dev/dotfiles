@@ -36,7 +36,7 @@ for var in $(compgen -e); do
 	esac
 done
 export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=never
-export GIT_SSH_COMMAND='ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none'
+export GIT_SSH_COMMAND='ssh -F /dev/null -o BatchMode=yes -o IdentityAgent=none -o UpdateHostKeys=no'
 # An empty credential.helper clears every configured helper, for every git call.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
 
@@ -52,24 +52,34 @@ ref=refs/tbhb-dotfiles-drift/origin-main
 src="$(chezmoi source-path </dev/null)" || fail source_path
 [[ -n "${src}" ]] || fail source_path
 tree="$(g "${src}" rev-parse --show-toplevel)" || fail source_tree
-# symbolic-ref exits 1 for a detached HEAD and higher for an error.
-# --no-recurse: a HEAD on a branch that points at main is not main.
-if head_ref="$(g "${tree}" symbolic-ref --quiet --no-recurse HEAD)"; then
-	branch="${head_ref#refs/heads/}"
-else
-	rc=$?
-	[[ "${rc}" == 1 ]] || fail symbolic_ref
-	head_ref=
-	branch=detached
-fi
-dirty="$(g "${tree}" status --porcelain --untracked-files=all)" || fail git_status
 # No tags, no FETCH_HEAD, no auto maintenance or commit graph: the fetch
 # writes only the refs. Its own output goes to stderr, off the report line.
 g "${tree}" -c maintenance.auto=false -c fetch.writeCommitGraph=false \
 	fetch --quiet --no-tags --no-write-fetch-head origin "+refs/heads/main:${ref}" </dev/null >&2 || fail fetch
-src_sha="$(g "${tree}" rev-parse --verify --quiet 'HEAD^{commit}')" || fail rev_parse
 origin_sha="$(g "${tree}" rev-parse --verify --quiet "${ref}^{commit}")" || fail rev_parse
-behind="$(g "${tree}" rev-list --count "HEAD..${ref}")" || fail rev_list
+# symbolic-ref exits 1 for a detached HEAD and higher for an error.
+# --no-recurse: a HEAD on a branch that points at main is not main.
+head_state() {
+	if head_ref="$(g "${tree}" symbolic-ref --quiet --no-recurse HEAD)"; then
+		:
+	else
+		rc=$?
+		[[ "${rc}" == 1 ]] || fail symbolic_ref
+		head_ref=
+	fi
+	src_sha="$(g "${tree}" rev-parse --verify --quiet 'HEAD^{commit}')" || fail rev_parse
+}
+# Read the branch, commit and dirty state after the fetch, then read the
+# branch and commit again: a switch during these reads is an error, not a
+# mix of two states.
+head_state
+first="${head_ref} ${src_sha}"
+dirty="$(g "${tree}" status --porcelain --untracked-files=all)" || fail git_status
+head_state
+[[ "${head_ref} ${src_sha}" == "${first}" ]] || fail source_changed
+branch=detached
+[[ -z "${head_ref}" ]] || branch="${head_ref#refs/heads/}"
+behind="$(g "${tree}" rev-list --count "${src_sha}..${ref}")" || fail rev_list
 
 count() {
 	local n=0
