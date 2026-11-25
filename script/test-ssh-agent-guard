@@ -136,6 +136,7 @@ for sh in /bin/sh /bin/bash /bin/zsh; do
 	guard_for refused "${sh} -l" "${g}" "${agent[@]}" -- -l "${me}" testprefix-qq04
 	guard_for refused "${sh} -l with a style suffix" "${g}" "${agent[@]}" -- -l "${me}:x" testprefix-qq04
 	guard_for refused "${sh} user with an empty style" "${g}" "${agent[@]}" -- "${me}:@testprefix-qq04"
+	guard_for refused "${sh} a % token user" "${g}" "${agent[@]}" -- -o User=%u testprefix-qq04
 	guard_for refused "${sh} -o User" "${g}" "${agent[@]}" -- -o User="${me}" testprefix-qq04
 	guard_for refused "${sh} bare host, local user" "${g}" "${agent[@]}" -- testprefix-qq04
 	guard_for refused "${sh} short name" "${g}" "${agent[@]}" -- qq04
@@ -167,6 +168,29 @@ guard_for refused "marker with the terminal profile" "${g}" "${human[@]}" CODEX_
 guard_for allowed "env -i, no marker" "${g}" SHELL=/bin/sh -- qq04
 guard_for allowed "hop over ssh, no marker" "${g}" SSH_CONNECTION="1 2 3 4" -- "${me}@testprefix-qq04"
 guard_for allowed "hop over ssh with a forwarded agent" "${g}" SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK=/tmp/fwd/agent -- qq04
+# Startup files can set a marker name without exporting it. Only the
+# inherited environment counts.
+printf 'CLAUDECODE=1\nCODEX_HOME=/x\n' >"${out}/startup"
+mkdir -p "${out}/zhome"
+cp "${out}/startup" "${out}/zhome/.zshenv"
+guard_for allowed "a marker set by BASH_ENV, not exported" "${g}" SHELL=/bin/bash BASH_ENV="${out}/startup" -- qq04
+if [[ -x /bin/zsh ]]; then
+	guard_for allowed "a marker set by .zshenv, not exported" "${g}" SHELL=/bin/zsh HOME="${out}/zhome" -- qq04
+fi
+# A failed message must not skip the kill. /dev/full exists on Linux only.
+for sh in /bin/sh /bin/bash /bin/zsh; do
+	[[ -x "${sh}" && -e /dev/full ]] || continue
+	rc=0
+	{ env -i HOME=/home/render PATH=/usr/bin:/bin SHELL="${sh}" CLAUDECODE=1 \
+		"${ssh_bin}" -T -G -F "${g}" qq04 >/dev/null 2>/dev/full || rc=$?; } 2>/dev/null
+	if [[ "${rc}" -eq 0 ]]; then
+		echo "FAIL guard ${sh} with stderr full: allowed, want refused"
+		fail=1
+	fi
+done
+guard_for refused "a marker with nounset inherited" "${g}" SHELL=/bin/bash SHELLOPTS=nounset CLAUDECODE=1 -- qq04
+guard_for allowed "a % token user, no marker" "${g}" SHELL=/bin/sh -- -o User=%u testprefix-qq04
+guard_for allowed "other user, % token in ControlPath" "${g}" CLAUDECODE=1 -- -o ControlPath=/tmp/x-%r "${other}@qq04"
 guard_for allowed "a TBHB_AGENT_ variable is not a marker" "${g}" TBHB_AGENT_RUN=1 -- qq04
 guard_for allowed "a multi-line value" "${g}" NOTES="$(printf 'todo:\nTBHB_AGENT_RUN=1\nCLAUDECODE=1')" -- qq04
 guard_for allowed "TBHB_OP_AGENT is not a marker" "${g}" TBHB_OP_AGENT=0 -- qq04
