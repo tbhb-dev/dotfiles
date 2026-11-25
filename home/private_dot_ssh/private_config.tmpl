@@ -4,6 +4,16 @@
 {{- /* Opt-in per host: a prefix and short-name patterns from the chezmoi data, so no host names live in this public repo. */ -}}
 {{- $sshShortPrefix := dig "sshShortHostPrefix" "" . -}}
 {{- $sshShortPatterns := dig "sshShortHostPatterns" (list) . -}}
+{{- /* Opt-in per host: the owner's account and the host patterns where agent sessions may not use it. */ -}}
+{{- $sshRefuseUser := dig "sshAgentRefuseUser" "" . -}}
+{{- /* Only plain names, since anything else could break every ssh or widen the match. Empty host entries are dropped. */ -}}
+{{- if and $sshRefuseUser (not (regexMatch "^[A-Za-z0-9_][A-Za-z0-9._-]*$" $sshRefuseUser)) -}}{{ fail "sshAgentRefuseUser must be one plain account name" }}{{- end -}}
+{{- if has $sshRefuseUser (list "ops" "agent") -}}{{ fail "sshAgentRefuseUser may not be ops or agent" }}{{- end -}}
+{{- $sshRefuseHosts := list -}}
+{{- range (dig "sshAgentRefuseHosts" (list) .) -}}
+{{- if and . (not (regexMatch "^[A-Za-z0-9_*?][A-Za-z0-9._*?-]*$" .)) -}}{{ fail "sshAgentRefuseHosts entries must be plain host names or patterns" }}{{- end -}}
+{{- if . }}{{ $sshRefuseHosts = append $sshRefuseHosts . }}{{ end -}}
+{{- end -}}
 
 {{ if $isDarwin -}}
 # Added by OrbStack: 'orb' SSH host for Linux machines
@@ -36,5 +46,21 @@ Host *
 Host *
   IdentityAgent "~/.1password/agent.sock"
   IdentitiesOnly no
+
+{{ end -}}
+{{ if and $sshRefuseUser $sshRefuseHosts -}}
+# The owner's account on these hosts is for the owner only. When an agent
+# harness variable is set (CLAUDECODE, CODEX_HOME or CODEX_THREAD_ID), ssh
+# stops itself while it reads this file. Without one,
+# nothing changes. This deters mistakes; it is not a control. Killing the parent ssh from Match exec runs
+# before any option takes effect, so -o, -i, -J and agent forwarding cannot skip
+# it for a name that matches. The block sits at the end of the file, so every
+# Hostname and User line before it counts. No final: that would add a second
+# pass for every host. SIGKILL, since an inherited ignore can mask SIGTERM.
+# user:* too, since sshd drops a :style suffix from the user name, and any
+# user with a % token, which Match sees before expansion. /bin/sh -c reads the
+# variables, so an unexported assignment in a startup file of SHELL doesn't
+# count. An exported one still does.
+Match host "{{ join "," $sshRefuseHosts }}" user "{{ $sshRefuseUser }},{{ $sshRefuseUser }}:*,*%*" exec "/bin/sh -c 'case ${CLAUDECODE-}${CODEX_HOME-}${CODEX_THREAD_ID-} in ?*) exit 0;; esac; exit 1' && { echo ssh refused: agent sessions may not log in as this user on this host. Use the ops account. >&2 || :; kill -9 $PPID; }"
 
 {{ end -}}

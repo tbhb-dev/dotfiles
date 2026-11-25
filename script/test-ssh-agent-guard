@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cspell:ignore identityagent keygen proxyjump
+# cspell:ignore identityagent keygen errexit nounset proxyjump shellopts testprefix
 # Render ~/.ssh/config under darwin data and ask ssh which IdentityAgent each
 # environment gets. Only a terminal profile's TBHB_OP_AGENT=1, with no ssh or
 # agent-harness variable, may reach the 1Password agent. No network, no agent.
@@ -82,6 +82,154 @@ sign_sock_for unset "marker with CODEX_HOME" TBHB_OP_AGENT=1 CODEX_HOME=/x SSH_A
 sign_sock_for unset "marker over ssh" TBHB_OP_AGENT=1 SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK="${op_sock}"
 sign_sock_for "${op_sock}" "terminal profile marker" TBHB_OP_AGENT=1 SSH_AUTH_SOCK="${op_sock}"
 sign_sock_for /tmp/fwd/agent "forwarded agent over ssh" SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK=/tmp/fwd/agent
+
+# The owner-account guard: with sshAgentRefuseUser and sshAgentRefuseHosts set,
+# ssh with an agent harness variable kills itself while reading the config for
+# that user on those hosts. Without one, ssh is unaffected. Fake names only. The guarded user is the local one,
+# so a bare host name falls back to it. ssh -G never connects.
+me="$(id -un)"
+other=ops
+[[ "${me}" != "${other}" ]] || other=agent
+other2=agent
+[[ "${me}" != "${other2}" ]] || other2=ops
+# The guard refuses to name ops or agent, so as either account the ssh cases
+# can't run. The render checks still do.
+guarded="${me}" skip_guard=
+if [[ "${me}" == ops || "${me}" == agent ]]; then
+	echo "SKIP guard ssh cases: the local user ${me} can't be the guarded account"
+	guarded=owner skip_guard=1
+fi
+guard_data="${data%\}}"',"sshShortHostPrefix":"testprefix-","sshShortHostPatterns":["qq??"],"sshAgentRefuseUser":"'"${guarded}"'","sshAgentRefuseHosts":["testprefix-qq0*"]}'
+"${CHEZMOI_BIN:-chezmoi}" execute-template \
+	--source "${src}" --config "${out}/chezmoi.toml" --override-data "${guard_data}" \
+	<"${src}/private_dot_ssh/private_config.tmpl" >"${out}/guard_config"
+if grep -q 'kill' "${out}/config"; then
+	echo "FAIL the guard is rendered without its data keys"
+	fail=1
+fi
+# Empty host entries are dropped, and anything but a plain name or pattern
+# stops the render.
+render_refuse() {
+	"${CHEZMOI_BIN:-chezmoi}" execute-template \
+		--source "${src}" --config "${out}/chezmoi.toml" \
+		--override-data "${data%\}}"',"sshAgentRefuseUser":"'"$1"'","sshAgentRefuseHosts":'"$2"'}' \
+		<"${src}/private_dot_ssh/private_config.tmpl" 2>/dev/null
+}
+if render_refuse owner '[""]' | grep -q 'kill'; then
+	echo "FAIL the guard is rendered for an empty host entry"
+	fail=1
+fi
+if ! render_refuse owner '["", "a.invalid"]' | grep -q '^Match host "a.invalid" '; then
+	echo "FAIL an empty host entry is not dropped"
+	fail=1
+fi
+for bad in 'owner|["a b"]' 'owner|["a\"b"]' "owner|[\"a'b\"]" 'owner|["a\\"]' 'owner|["#a"]' 'owner|["a\u000Bb"]' 'owner|["a,b"]' 'own er|["a.invalid"]' 'own er|[]' '#owner|["a.invalid"]' 'owner,ops|["a.invalid"]' '*|["a.invalid"]' 'ops|["a.invalid"]' 'agent|["a.invalid"]'; do
+	if render_refuse "${bad%%|*}" "${bad#*|}" >/dev/null; then
+		echo "FAIL the render accepts bad data: ${bad}"
+		fail=1
+	fi
+done
+# guard_for <refused|allowed> <label> <config> VAR=value ... -- <ssh args>
+guard_for() {
+	local want="$1" label="$2" config="$3" got rc=0 err envs=()
+	[[ -z "${skip_guard}" ]] || return 0
+	shift 3
+	while [[ "$1" != "--" ]]; do
+		envs+=("$1")
+		shift
+	done
+	shift
+	err="$(env -i HOME=/home/render PATH=/usr/bin:/bin "${envs[@]}" "${ssh_bin}" -T -G -F "${config}" "$@" 2>&1 >/dev/null)" || rc=$?
+	if [[ "${rc}" -ne 0 && "${err}" == *"ssh refused"* ]]; then
+		got=refused
+	elif [[ "${rc}" -eq 0 ]]; then
+		got=allowed
+	else
+		got="exit ${rc}: ${err}"
+	fi
+	if [[ "${got}" != "${want}" ]]; then
+		echo "FAIL guard ${label}: ${got}, want ${want}"
+		fail=1
+	fi
+}
+g="${out}/guard_config"
+# Hostname and User lines ahead of the guard count. ssh reads the file once,
+# so a Host block for the name that Hostname sets doesn't apply, and the guard
+# must not add a second pass: a RemoteCommand there would break an alias.
+lines="Host alias.invalid\n  Hostname testprefix-qq06\nHost testprefix-qq07\n  User ${other}\nHost alias2.invalid\n  Hostname testprefix-qq08\nHost testprefix-qq08\n  User ${other}\nHost batch.invalid\n  Hostname service.invalid\nHost service.invalid\n  RemoteCommand tmux attach\n"
+awk -v lines="${lines}" '/^Match host/ { printf "%s", lines } { print }' "${out}/guard_config" >"${g}.new"
+mv "${g}.new" "${g}"
+human=(TBHB_OP_AGENT=1)
+for sh in /bin/sh /bin/bash /bin/zsh; do
+	[[ -x "${sh}" ]] || continue
+	agent=(SHELL="${sh}" TBHB_OP_AGENT=1 CLAUDECODE=1)
+	guard_for refused "${sh} user@host" "${g}" "${agent[@]}" -- "${me}@testprefix-qq04"
+	guard_for refused "${sh} -l" "${g}" "${agent[@]}" -- -l "${me}" testprefix-qq04
+	guard_for refused "${sh} -l with a style suffix" "${g}" "${agent[@]}" -- -l "${me}:x" testprefix-qq04
+	guard_for refused "${sh} user with an empty style" "${g}" "${agent[@]}" -- "${me}:@testprefix-qq04"
+	guard_for refused "${sh} a % token user" "${g}" "${agent[@]}" -- -o User=%u testprefix-qq04
+	guard_for refused "${sh} -o User" "${g}" "${agent[@]}" -- -o User="${me}" testprefix-qq04
+	guard_for refused "${sh} bare host, local user" "${g}" "${agent[@]}" -- testprefix-qq04
+	guard_for refused "${sh} short name" "${g}" "${agent[@]}" -- qq04
+	guard_for refused "${sh} full name with a domain" "${g}" "${agent[@]}" -- "${me}@testprefix-qq04.example.invalid"
+	guard_for refused "${sh} trailing dot" "${g}" "${agent[@]}" -- "${me}@testprefix-qq04."
+	guard_for refused "${sh} later Hostname line" "${g}" "${agent[@]}" -- "${me}@alias.invalid"
+	guard_for allowed "${sh} later User line" "${g}" "${agent[@]}" -- testprefix-qq07
+	guard_for refused "${sh} User line under the Hostname name" "${g}" "${agent[@]}" -- alias2.invalid
+	guard_for refused "${sh} upper case" "${g}" "${agent[@]}" -- "${me}@TESTPREFIX-QQ04"
+	guard_for refused "${sh} -o Hostname" "${g}" "${agent[@]}" -- -o Hostname=testprefix-qq05 "${me}@other.invalid"
+	guard_for refused "${sh} -o ProxyCommand=none" "${g}" "${agent[@]}" -- -o ProxyCommand=none qq04
+	guard_for refused "${sh} -J" "${g}" "${agent[@]}" -- -J hop.invalid qq04
+	guard_for refused "${sh} -i with IdentitiesOnly=no" "${g}" "${agent[@]}" -- -i /dev/null -o IdentitiesOnly=no -A qq04
+	guard_for allowed "${sh} other user" "${g}" "${agent[@]}" -- "${other}@qq04"
+	guard_for allowed "${sh} other user, full name" "${g}" "${agent[@]}" -- -l "${other}" testprefix-qq04
+	guard_for allowed "${sh} second other user" "${g}" "${agent[@]}" -- "${other2}@qq04"
+	guard_for allowed "${sh} unguarded host" "${g}" "${agent[@]}" -- "${me}@other.invalid"
+	guard_for allowed "${sh} terminal profile" "${g}" SHELL="${sh}" "${human[@]}" -- qq04
+done
+trap '' TERM
+guard_for refused "SIGTERM ignored" "${g}" SHELL=/bin/sh CLAUDECODE=1 -- qq04
+trap - TERM
+# Each marker alone refuses, with or without the terminal profile.
+guard_for refused "CLAUDECODE alone" "${g}" CLAUDECODE=1 -- qq04
+guard_for refused "CODEX_HOME alone" "${g}" CODEX_HOME=/x -- qq04
+guard_for refused "CODEX_THREAD_ID alone" "${g}" CODEX_THREAD_ID=x -- qq04
+guard_for refused "marker with the terminal profile" "${g}" "${human[@]}" CODEX_THREAD_ID=x -- qq04
+# No marker: the owner's non-terminal use passes.
+guard_for allowed "env -i, no marker" "${g}" SHELL=/bin/sh -- qq04
+guard_for allowed "hop over ssh, no marker" "${g}" SSH_CONNECTION="1 2 3 4" -- "${me}@testprefix-qq04"
+guard_for allowed "hop over ssh with a forwarded agent" "${g}" SSH_CONNECTION="1 2 3 4" SSH_AUTH_SOCK=/tmp/fwd/agent -- qq04
+# Startup files can set a marker name without exporting it. Only the
+# inherited environment counts.
+printf 'CLAUDECODE=1\nCODEX_HOME=/x\n' >"${out}/startup"
+mkdir -p "${out}/startup-home"
+cp "${out}/startup" "${out}/startup-home/.zshenv"
+guard_for allowed "a marker set by BASH_ENV, not exported" "${g}" SHELL=/bin/bash BASH_ENV="${out}/startup" -- qq04
+if [[ -x /bin/zsh ]]; then
+	guard_for allowed "a marker set by .zshenv, not exported" "${g}" SHELL=/bin/zsh HOME="${out}/startup-home" -- qq04
+fi
+# A failed message must not skip the kill, even under errexit. /dev/full
+# exists on Linux only.
+for sh in /bin/sh /bin/bash /bin/zsh; do
+	[[ -x "${sh}" && -e /dev/full && -z "${skip_guard}" ]] || continue
+	rc=0
+	{ env -i HOME=/home/render PATH=/usr/bin:/bin SHELL="${sh}" SHELLOPTS=errexit CLAUDECODE=1 \
+		"${ssh_bin}" -T -G -F "${g}" qq04 >/dev/null 2>/dev/full || rc=$?; } 2>/dev/null
+	if [[ "${rc}" -eq 0 ]]; then
+		echo "FAIL guard ${sh} with stderr full: allowed, want refused"
+		fail=1
+	fi
+done
+guard_for refused "a marker with nounset inherited" "${g}" SHELL=/bin/bash SHELLOPTS=nounset CLAUDECODE=1 -- qq04
+guard_for allowed "an alias with a command, no second pass" "${g}" SHELL=/bin/sh -- "${me}@batch.invalid" uptime
+guard_for allowed "a % token user, no marker" "${g}" SHELL=/bin/sh -- -o User=%u testprefix-qq04
+guard_for allowed "other user, % token in ControlPath" "${g}" CLAUDECODE=1 -- -o ControlPath=/tmp/x-%r "${other}@qq04"
+guard_for allowed "a TBHB_AGENT_ variable is not a marker" "${g}" TBHB_AGENT_RUN=1 -- qq04
+guard_for allowed "a multi-line value" "${g}" NOTES="$(printf 'todo:\nTBHB_AGENT_RUN=1\nCLAUDECODE=1')" -- qq04
+guard_for allowed "TBHB_OP_AGENT is not a marker" "${g}" TBHB_OP_AGENT=0 -- qq04
+guard_for allowed "terminal profile, user@host" "${g}" "${human[@]}" -- "${me}@testprefix-qq04"
+guard_for allowed "terminal profile, -l" "${g}" "${human[@]}" -- -l "${me}" testprefix-qq04
+guard_for allowed "no data keys, agent env" "${out}/config" CLAUDECODE=1 -- "${me}@testprefix-qq04"
 
 [[ "${fail}" -eq 0 ]] && echo "ssh agent guard: all cases pass"
 exit "${fail}"

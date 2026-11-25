@@ -227,9 +227,23 @@ sh_test(
 
 # Asks ssh, with env -i and with agent markers set, which IdentityAgent the
 # rendered ~/.ssh/config gives. Only the terminal marker may reach 1Password.
+# With fake per-host data, also checks that ssh outside the terminal profile
+# stops itself for the guarded user on the guarded hosts and for no one else.
 sh_test(
     name = "ssh_agent_guard_test",
     srcs = ["script/test-ssh-agent-guard"],
+    data = [
+        ":chezmoi",
+        "//:home_files",
+    ],
+    env = {"CHEZMOI_BIN": "$(rootpath :chezmoi)"},
+)
+
+# Starts a throwaway tmux server the way an agent harness would, with its
+# variables set, and checks that no later pane inherits them. Skips without tmux.
+sh_test(
+    name = "tmux_agent_markers_test",
+    srcs = ["script/test-tmux-agent-markers"],
     data = [
         ":chezmoi",
         "//:home_files",
